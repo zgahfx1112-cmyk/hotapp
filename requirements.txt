@@ -1,0 +1,2 @@
+# HotApp - 无需额外依赖，纯 Python 标准库
+# 留空即可，满足 Render 检测要求
