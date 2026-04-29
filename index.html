@@ -330,32 +330,36 @@ body{
 /* ====== Floating Buttons ====== */
 .floating-btns{
   position:fixed;
-  bottom:20px;
-  right:20px;
+  bottom:16px;
+  right:16px;
   display:flex;
   flex-direction:column;
-  gap:8px;
+  gap:6px;
   z-index:200;
 }
 .floating-btn{
-  width:40px;
-  height:40px;
-  border-radius:8px;
+  width:48px;
+  height:48px;
+  border-radius:12px;
   background:var(--bg-secondary);
   color:var(--accent);
-  font-size:20px;
-  font-weight:600;
+  font-size:22px;
   display:flex;
   align-items:center;
   justify-content:center;
   cursor:pointer;
   border:1px solid var(--border);
-  box-shadow:var(--shadow);
-  transition:var(--transition);
+  box-shadow:0 2px 8px rgba(0,0,0,0.12);
+  transition:transform 0.15s ease, opacity 0.15s ease;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
 }
-.floating-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
-.floating-btn:active{transform:scale(0.95)}
+.floating-btn:hover{border-color:var(--accent)}
+.floating-btn:active{transform:scale(0.92);background:var(--bg-hover)}
 .floating-btn.hidden{opacity:0;pointer-events:none;transform:scale(0.8)}
+@media(min-width:768px){
+  .floating-btn{width:40px;height:40px;border-radius:8px;font-size:20px}
+}
 
 /* scrollbar */
 ::-webkit-scrollbar{width:6px}
