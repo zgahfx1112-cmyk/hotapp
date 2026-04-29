@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HotApp - 全网热搜聚合</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4f6ef6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <style>
 /* ====== CSS Reset & Variables ====== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -956,6 +961,13 @@ function init() {
   loadTrending(true);
   renderInterestTags();
   startKeepAlive();
+
+  // 注册 Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(() => {
+      console.log('[HotApp] Service Worker registered');
+    }).catch(e => console.log('[HotApp] SW failed:', e));
+  }
 }
 
 // 启动
