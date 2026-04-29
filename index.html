@@ -153,6 +153,8 @@ body{
 .platform-badge.baidu{background:#4e6ef2}
 .platform-badge.toutiao{background:#e13b3b}
 .platform-badge.douyin{background:#1a1a2e;color:#fe2c55}
+.platform-badge.douban{background:#00b51d}
+.platform-badge.36kr{background:#2386e0}
 .heat-bar{
   height:4px;
   background:var(--border);
@@ -393,6 +395,8 @@ body{
       <button class="tab" data-platform="douyin">抖音</button>
       <button class="tab" data-platform="baidu">百度</button>
       <button class="tab" data-platform="toutiao">头条</button>
+      <button class="tab" data-platform="douban">豆瓣</button>
+      <button class="tab" data-platform="36kr">36氪</button>
     </div>
     <div id="errorBanner"></div>
     <div class="trending-list" id="trendingList">
@@ -585,21 +589,46 @@ class Recommender {
 }
 
 // ============================================================================
-// 数据抓取模块 - 调用同源 /api/trending（服务端抓取，无 CORS 问题）
+// 数据抓取模块 - 三重优先级：服务端缓存 → 实时抓取 → 本地兜底
 // ============================================================================
 
 async function fetchAllTrending() {
   const results = [], errors = [];
+
+  // 优先级1: 请求服务端（服务端已有缓存机制）
   try {
     const resp = await fetch('/api/trending', { signal: AbortSignal.timeout(15000) });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     results.push(...(data.items || []));
     if (data.errors) errors.push(...data.errors);
+
+    // 成功后保存到 localStorage 兜底缓存
+    if (results.length > 0) {
+      localStorage.setItem('hotapp_fallback', JSON.stringify(data));
+      localStorage.setItem('hotapp_fallback_time', String(Date.now()));
+    }
+    return { results, errors };
   } catch (e) {
     errors.push('服务端');
-    console.error('[HotApp] 获取失败:', e.message);
+    console.error('[HotApp] 服务端获取失败:', e.message);
   }
+
+  // 优先级2: 服务端失败，尝试本地 localStorage 兜底
+  const cached = localStorage.getItem('hotapp_fallback');
+  if (cached) {
+    try {
+      const data = JSON.parse(cached);
+      if (data.items && data.items.length > 0) {
+        console.log('[HotApp] 使用本地缓存兜底');
+        return { results: data.items, errors: ['网络失败，使用缓存'] };
+      }
+    } catch (e) {
+      console.error('[HotApp] 本地缓存解析失败');
+    }
+  }
+
+  // 完全失败
   return { results, errors };
 }
 
@@ -746,7 +775,7 @@ interestTags.addEventListener('click', (e) => {
 // 工具函数
 // ============================================================================
 function getPlatformName(key) {
-  const map = { weibo: '微博', bilibili: 'B站', douyin: '抖音', baidu: '百度', toutiao: '头条' };
+  const map = { weibo: '微博', bilibili: 'B站', douyin: '抖音', baidu: '百度', toutiao: '头条', douban: '豆瓣', '36kr': '36氪' };
   return map[key] || key;
 }
 
