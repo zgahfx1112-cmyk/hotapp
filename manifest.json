@@ -2,7 +2,7 @@
   "name": "HotApp - 全网热搜聚合",
   "short_name": "HotApp",
   "description": "聚合微博、B站、抖音、百度、头条热搜，智能推荐",
-  "start_url": "/?v=3",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f6f8",
   "theme_color": "#4f6ef6",
