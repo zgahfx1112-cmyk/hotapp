@@ -327,6 +327,36 @@ body{
 }
 .error-banner .retry-link{color:var(--accent);cursor:pointer;text-decoration:underline;margin-left:auto}
 
+/* ====== Floating Buttons ====== */
+.floating-btns{
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  z-index:200;
+}
+.floating-btn{
+  width:40px;
+  height:40px;
+  border-radius:8px;
+  background:var(--bg-secondary);
+  color:var(--accent);
+  font-size:20px;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+  transition:var(--transition);
+}
+.floating-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.floating-btn:active{transform:scale(0.95)}
+.floating-btn.hidden{opacity:0;pointer-events:none;transform:scale(0.8)}
+
 /* scrollbar */
 ::-webkit-scrollbar{width:6px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -381,6 +411,12 @@ body{
       <div class="feed-loading" id="feedLoading" style="display:none">⏳ 加载中...</div>
     </div>
   </div>
+</div>
+
+<!-- ====== Floating Buttons ====== -->
+<div class="floating-btns">
+  <button class="floating-btn" id="refreshBtn" title="刷新">🔄</button>
+  <button class="floating-btn hidden" id="topBtn" title="回到顶部">⬆️</button>
 </div>
 
 <script>
@@ -752,24 +788,14 @@ const feedLoadingEl = $('#feedLoading');
 
 // 基于热搜数据衍生推荐内容
 function generateFeedItems(sourceItems) {
-  // 优先使用有图片的数据
-  const withImg = sourceItems.filter(i => i.image);
-  const withoutImg = sourceItems.filter(i => !i.image);
-  const pool = [...withImg.sort(() => Math.random() - 0.5), ...withoutImg.sort(() => Math.random() - 0.5)];
-  const articles = [];
-  const templates = [
-    (item) => ({ title: `深度解读：「${item.title}」背后的故事与影响`, platform: item.platform, heat: item.heatScore, image: item.image, url: item.url }),
-    (item) => ({ title: `关于「${item.title}」，你可能不知道的这些细节`, platform: item.platform, heat: item.heatScore, image: item.image, url: item.url }),
-    (item) => ({ title: `「${item.title}」引发热议，各方观点一文汇总`, platform: item.platform, heat: item.heatScore, image: item.image, url: item.url }),
-    (item) => ({ title: `数据分析：「${item.title}」为什么能登上热搜榜？`, platform: item.platform, heat: item.heatScore, image: item.image, url: item.url }),
-    (item) => ({ title: `网友热议「${item.title}」：这背后说明了什么？`, platform: item.platform, heat: item.heatScore, image: item.image, url: item.url }),
-    (item) => ({ title: `一文读懂「${item.title}」的来龙去脉`, platform: item.platform, heat: item.heatScore, image: item.image, url: item.url }),
-    (item) => ({ title: `「${item.title}」登上多平台热搜，专家这样看`, platform: item.platform, heat: item.heatScore, image: item.image, url: item.url }),
-  ];
-  for (let i = 0; i < pool.length; i++) {
-    articles.push(templates[i % templates.length](pool[i]));
-  }
-  return articles;
+  const pool = [...sourceItems].sort(() => Math.random() - 0.5);
+  return pool.map(item => ({
+    title: item.title,
+    platform: item.platform,
+    heat: item.heatScore,
+    image: item.image,
+    url: item.url
+  }));
 }
 
 // 生成渐变背景色作为卡片图片占位
@@ -861,9 +887,63 @@ function refreshFeed() {
   feedLoading = false;
   feedLoadingEl.style.display = 'none';
   feedLoadingEl.innerHTML = '⏳ 加载中...';
-  feedItems = generateFeedItems(state.allItems);
+  // 重新生成，避免重复
+  const shuffled = [...state.allItems].sort(() => Math.random() - 0.5);
+  // 使用 Set 去重标题
+  const seen = new Set();
+  feedItems = [];
+  for (const item of shuffled) {
+    if (!seen.has(item.title)) {
+      seen.add(item.title);
+      feedItems.push({
+        title: item.title,
+        platform: item.platform,
+        heat: item.heatScore,
+        image: item.image,
+        url: item.url
+      });
+    }
+  }
   loadFeedPage();
 }
+
+// ============================================================================
+// Keep-alive (防止 Render 休眠)
+// ============================================================================
+let keepAliveTimer = null;
+function startKeepAlive() {
+  if (keepAliveTimer) return;
+  // 每 14 分钟请求一次，防止 15 分钟休眠
+  keepAliveTimer = setInterval(async () => {
+    try {
+      await fetch('/api/trending', { method: 'HEAD' });
+      console.log('[HotApp] Keep-alive ping sent');
+    } catch (e) {
+      console.log('[HotApp] Keep-alive failed:', e.message);
+    }
+  }, 14 * 60 * 1000);
+}
+
+// ============================================================================
+// 悬浮按钮
+// ============================================================================
+const refreshBtn = $('#refreshBtn');
+const topBtn = $('#topBtn');
+
+refreshBtn.addEventListener('click', () => {
+  showToast('🔄 正在刷新...');
+  fullRefresh();
+});
+
+topBtn.addEventListener('click', () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// 根据滚动位置显示/隐藏回到顶部按钮
+window.addEventListener('scroll', () => {
+  const shouldShow = window.scrollY > 300;
+  topBtn.classList.toggle('hidden', !shouldShow);
+}, { passive: true });
 
 // ============================================================================
 // 初始化
@@ -871,6 +951,7 @@ function refreshFeed() {
 function init() {
   loadTrending(true);
   renderInterestTags();
+  startKeepAlive();
 }
 
 // 启动
