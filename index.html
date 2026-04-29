@@ -150,11 +150,12 @@ body{
 .platform-badge.weibo{background:#e6162d}
 .platform-badge.zhihu{background:#0066ff}
 .platform-badge.bilibili{background:#fb7299}
+.platform-badge.bilibili_pop{background:#fb7299}
 .platform-badge.baidu{background:#4e6ef2}
 .platform-badge.toutiao{background:#e13b3b}
 .platform-badge.douyin{background:#1a1a2e;color:#fe2c55}
-.platform-badge.douban{background:#00b51d}
-.platform-badge.36kr{background:#2386e0}
+.platform-badge.douban{background:#2d8f2d;color:#fff}
+.platform-badge.tieba{background:#4879bd}
 .heat-bar{
   height:4px;
   background:var(--border);
@@ -394,9 +395,9 @@ body{
       <button class="tab" data-platform="bilibili">B站</button>
       <button class="tab" data-platform="douyin">抖音</button>
       <button class="tab" data-platform="baidu">百度</button>
+      <button class="tab" data-platform="tieba">贴吧</button>
       <button class="tab" data-platform="toutiao">头条</button>
       <button class="tab" data-platform="douban">豆瓣</button>
-      <button class="tab" data-platform="36kr">36氪</button>
     </div>
     <div id="errorBanner"></div>
     <div class="trending-list" id="trendingList">
@@ -775,7 +776,7 @@ interestTags.addEventListener('click', (e) => {
 // 工具函数
 // ============================================================================
 function getPlatformName(key) {
-  const map = { weibo: '微博', bilibili: 'B站', douyin: '抖音', baidu: '百度', toutiao: '头条', douban: '豆瓣', '36kr': '36氪' };
+  const map = { weibo: '微博', bilibili: 'B站热搜', bilibili_pop: 'B站热门', douyin: '抖音', baidu: '百度', toutiao: '头条', douban: '豆瓣', tieba: '贴吧' };
   return map[key] || key;
 }
 

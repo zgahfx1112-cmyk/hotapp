@@ -83,8 +83,7 @@ def parse_toutiao(data):
 
 def parse_douban_movie(data):
     items = data.get("subjects") or []
-    if not items:
-        return []  # 豆瓣可能返回空数据
+    if not items: return []
     return [{"id": f"douban_movie_{i}", "title": x.get("title", ""),
              "url": x.get("url") or f"https://movie.douban.com/subject/{x.get('id','')}",
              "platform": "douban", "rank": i+1,
@@ -92,12 +91,26 @@ def parse_douban_movie(data):
 
 def parse_douban_tv(data):
     items = data.get("subjects") or []
-    if not items:
-        return []
+    if not items: return []
     return [{"id": f"douban_tv_{i}", "title": x.get("title", ""),
              "url": x.get("url") or f"https://movie.douban.com/subject/{x.get('id','')}",
              "platform": "douban", "rank": i+1,
              "heatScore": int(float(x.get("rate", 0) or 0) * 1000) or (6500-i*100)} for i,x in enumerate(items[:30])]
+
+def parse_tieba(data):
+    items = (data.get("data", {}) or {}).get("bang_topic", {}) or {}
+    items = items.get("topic_list") or []
+    return [{"id": f"tieba_{x.get('topic_id', i)}", "title": x.get("topic_name", ""),
+             "url": x.get("topic_url") or f"https://tieba.baidu.com/hottopic/browse/hottopic?topic_id={x.get('topic_id','')}",
+             "platform": "tieba", "rank": i+1,
+             "heatScore": x.get("discuss_num") or (7500-i*80)} for i,x in enumerate(items[:30])]
+
+def parse_bilibili_popular(data):
+    items = data.get("data", {}).get("list") or []
+    return [{"id": f"bili_pop_{i}", "title": x.get("title", ""),
+             "url": f"https://www.bilibili.com/video/{x.get('bvid','')}",
+             "platform": "bilibili_pop", "rank": i+1,
+             "heatScore": x.get("stat", {}).get("view") or (6000-i*50)} for i,x in enumerate(items[:30])]
 
 def parse_36kr(data):
     if isinstance(data, str):
@@ -116,10 +129,14 @@ PLATFORMS = {
         "url": "https://weibo.com/ajax/side/hotSearch",
         "hdrs": {"User-Agent": UA, "Referer": "https://weibo.com/", "X-Requested-With": "XMLHttpRequest"},
         "parse": parse_weibo},
-    "bilibili": {"name": "B站",
+    "bilibili": {"name": "B站热搜",
         "url": "https://api.bilibili.com/x/web-interface/wbi/search/square?limit=50",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.bilibili.com/"},
         "parse": parse_bilibili},
+    "bilibili_pop": {"name": "B站热门",
+        "url": "https://api.bilibili.com/x/web-interface/popular?ps=30",
+        "hdrs": {"User-Agent": UA, "Referer": "https://www.bilibili.com/"},
+        "parse": parse_bilibili_popular},
     "douyin": {"name": "抖音",
         "url": "https://www.douyin.com/aweme/v1/web/hot/search/list/?detail_list=1&count=50",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.douyin.com/"},
@@ -128,6 +145,10 @@ PLATFORMS = {
         "url": "https://top.baidu.com/board?tab=realtime",
         "hdrs": {"User-Agent": UA},
         "parse": parse_baidu},
+    "tieba": {"name": "贴吧",
+        "url": "https://tieba.baidu.com/hottopic/browse/topicList",
+        "hdrs": {"User-Agent": UA, "Referer": "https://tieba.baidu.com/"},
+        "parse": parse_tieba},
     "toutiao": {"name": "头条",
         "url": "https://www.toutiao.com/hot-event/hot-board/?origin=toutiao_pc",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.toutiao.com/"},
