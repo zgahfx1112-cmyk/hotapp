@@ -124,6 +124,27 @@ def parse_36kr(data):
              "platform": "36kr", "rank": i+1,
              "heatScore": 6000-i*50} for i,x in enumerate(items[:30])]
 
+def parse_sspai(data):
+    items = data.get("list") or []
+    result = []
+    for i, x in enumerate(items[:30]):
+        views = x.get("views_count", 0)
+        if views is None or views == "":
+            views = 5000 - i * 80
+        else:
+            views = int(views) if views > 0 else (5000 - i * 80)
+        # 清理 title 中的特殊字符（换行、引号等）
+        title = (x.get("title") or "").replace("\n", "").replace("\r", "").replace('"', '').replace("'", "").strip()
+        result.append({
+            "id": f"sspai_{i}",
+            "title": title,
+            "url": f"https://sspai.com/post/{x.get('id','')}",
+            "platform": "sspai",
+            "rank": i+1,
+            "heatScore": views
+        })
+    return result
+
 PLATFORMS = {
     "weibo": {"name": "微博",
         "url": "https://weibo.com/ajax/side/hotSearch",
@@ -153,6 +174,10 @@ PLATFORMS = {
         "url": "https://www.toutiao.com/hot-event/hot-board/?origin=toutiao_pc",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.toutiao.com/"},
         "parse": parse_toutiao},
+    "sspai": {"name": "少数派",
+        "url": "https://sspai.com/api/v1/articles?page=1&limit=30",
+        "hdrs": {"User-Agent": UA, "Referer": "https://sspai.com/"},
+        "parse": parse_sspai},
     "douban_movie": {"name": "豆瓣电影",
         "url": "https://movie.douban.com/j/search_subjects?type=movie&tag=%E7%83%AD%E9%97%A8&page_limit=30&page_start=0",
         "hdrs": {"User-Agent": UA, "Referer": "https://movie.douban.com/"},
@@ -293,6 +318,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
         else:
             super().do_GET()
+
+    def do_HEAD(self):
+        # 响应 HEAD 请求，用于 keep-alive ping
+        if self.path.startswith("/api/trending"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+        else:
+            super().do_HEAD()
 
     def _api_trending(self):
         """三重优先级返回数据"""

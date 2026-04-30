@@ -156,6 +156,7 @@ body{
 .platform-badge.douyin{background:#1a1a2e;color:#fe2c55}
 .platform-badge.douban{background:#1d7c1d;color:#fff}
 .platform-badge.tieba{background:#2a5f9e;color:#fff}
+.platform-badge.sspai{background:#da282a;color:#fff}
 .heat-bar{
   height:4px;
   background:var(--border);
@@ -784,7 +785,7 @@ interestTags.addEventListener('click', (e) => {
 // 工具函数
 // ============================================================================
 function getPlatformName(key) {
-  const map = { weibo: '微博', bilibili: 'B站热搜', bilibili_pop: 'B站热门', douyin: '抖音', baidu: '百度', toutiao: '头条', douban: '豆瓣', tieba: '贴吧' };
+  const map = { weibo: '微博', bilibili: 'B站热搜', bilibili_pop: 'B站热门', douyin: '抖音', baidu: '百度', toutiao: '头条', douban: '豆瓣', tieba: '贴吧', sspai: '少数派' };
   return map[key] || key;
 }
 
