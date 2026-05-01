@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hotapp-v2';
+const CACHE_NAME = 'hotapp-v3';
 const STATIC_ASSETS = ['/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -19,10 +19,14 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // index.html 网络优先，确保版本更新自动生效
-  if (url.includes('/index.html') || url.endsWith('/') || url.match(/\/\?v=\d+$/)) {
+  // index.html 和根路径 网络优先，确保版本更新自动生效
+  if (url.includes('/index.html') || url.endsWith('/') || url.match(/\/\?v=\d+$/) || url.endsWith('hotapp.onrender.com')) {
     e.respondWith(
-      fetch(e.request).catch(() => caches.match('/index.html'))
+      fetch(e.request).then(resp => {
+        // 更新缓存
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, resp.clone()));
+        return resp;
+      }).catch(() => caches.match('/index.html'))
     );
     return;
   }
