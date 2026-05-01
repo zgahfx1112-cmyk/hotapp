@@ -263,16 +263,27 @@ body{
   font-size:11px;
   color:var(--text-muted);
 }
-.feed-card .feed-img{
+.feed-card .feed-img-wrap{
   width:100%;
   height:140px;
-  object-fit:cover;
   border-radius:4px;
   margin-bottom:10px;
-  background:var(--bg-primary);
-  display:block;
+  overflow:hidden;
+  position:relative;
 }
-.feed-card .feed-img[src=""]{display:none}
+.feed-card .feed-img-wrap img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  position:absolute;
+  top:0;left:0;
+  transition:opacity 0.3s;
+}
+.feed-card .feed-img-wrap .fallback{
+  width:100%;
+  height:100%;
+  display:none;
+}
 .feed-sentinel{height:1px}
 .feed-loading{
   text-align:center;
@@ -864,8 +875,8 @@ const GRADIENTS = [
 function renderFeedCard(article, index) {
   const gradient = GRADIENTS[index % GRADIENTS.length];
   const imgHtml = article.image
-    ? `<img class="feed-img" src="${article.image}" loading="lazy" onerror="this.style.display='none'">`
-    : `<div class="feed-img" style="background:${gradient}"></div>`;
+    ? `<div class="feed-img-wrap"><img src="${article.image}" loading="lazy" onerror="this.style.opacity='0';this.nextElementSibling.style.display='block'"><div class="fallback" style="background:${gradient}"></div></div>`
+    : `<div class="feed-img-wrap"><div class="fallback" style="background:${gradient};display:block"></div></div>`;
   return `
     <div class="feed-card" data-url="${escapeHtml(article.url || '')}">
       ${imgHtml}
