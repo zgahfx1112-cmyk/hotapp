@@ -129,12 +129,20 @@ def parse_sspai(data):
     result = []
     for i, x in enumerate(items[:30]):
         views = x.get("views_count", 0)
-        if views is None or views == "":
+        if views is None or views == "" or views == 0:
             views = 5000 - i * 80
         else:
-            views = int(views) if views > 0 else (5000 - i * 80)
-        # 清理 title 中的特殊字符（换行、引号等）
-        title = (x.get("title") or "").replace("\n", "").replace("\r", "").replace('"', '').replace("'", "").strip()
+            try:
+                views = int(views)
+            except:
+                views = 5000 - i * 80
+        # 清理 title 中的所有特殊字符
+        title = (x.get("title") or "")
+        title = title.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+        title = title.replace('"', '').replace("'", "").replace("\\", "")
+        title = title.strip()
+        if not title:
+            continue
         result.append({
             "id": f"sspai_{i}",
             "title": title,
@@ -145,17 +153,40 @@ def parse_sspai(data):
         })
     return result
 
+def parse_ithome(data):
+    items = data.get("newslist") or []
+    result = []
+    for i, x in enumerate(items[:50]):
+        # 清理 title 中的特殊字符
+        title = (x.get("title") or "").replace("\n", "").replace("\r", "").replace('"', '').replace("'", "").strip()
+        hits = x.get("hitcount", 0) or 0
+        # 使用返回的 url 字段或构造 URL
+        url = x.get("url", "")
+        if url.startswith("/"):
+            url = f"https://www.ithome.com{url}"
+        elif not url.startswith("http"):
+            url = f"https://www.ithome.com/0/{x.get('newsid','')}.htm"
+        result.append({
+            "id": f"ithome_{x.get('newsid', i)}",
+            "title": title,
+            "url": url,
+            "platform": "ithome",
+            "rank": i+1,
+            "heatScore": int(hits) if hits > 0 else (4500 - i * 50)
+        })
+    return result
+
 PLATFORMS = {
     "weibo": {"name": "微博",
         "url": "https://weibo.com/ajax/side/hotSearch",
         "hdrs": {"User-Agent": UA, "Referer": "https://weibo.com/", "X-Requested-With": "XMLHttpRequest"},
         "parse": parse_weibo},
     "bilibili": {"name": "B站热搜",
-        "url": "https://api.bilibili.com/x/web-interface/wbi/search/square?limit=50",
+        "url": "https://api.bilibili.com/x/web-interface/search/square?limit=50",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.bilibili.com/"},
         "parse": parse_bilibili},
     "bilibili_pop": {"name": "B站热门",
-        "url": "https://api.bilibili.com/x/web-interface/popular?ps=30",
+        "url": "https://api.bilibili.com/x/web-interface/popular?ps=50",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.bilibili.com/"},
         "parse": parse_bilibili_popular},
     "douyin": {"name": "抖音",
@@ -178,12 +209,16 @@ PLATFORMS = {
         "url": "https://sspai.com/api/v1/articles?page=1&limit=30",
         "hdrs": {"User-Agent": UA, "Referer": "https://sspai.com/"},
         "parse": parse_sspai},
+    "ithome": {"name": "IT之家",
+        "url": "https://api.ithome.com/json/newslist/news",
+        "hdrs": {"User-Agent": UA, "Referer": "https://www.ithome.com/"},
+        "parse": parse_ithome},
     "douban_movie": {"name": "豆瓣电影",
-        "url": "https://movie.douban.com/j/search_subjects?type=movie&tag=%E7%83%AD%E9%97%A8&page_limit=30&page_start=0",
+        "url": "https://movie.douban.com/j/search_subjects?type=movie&tag=%E7%83%AD%E9%97%A8&page_limit=50&page_start=0",
         "hdrs": {"User-Agent": UA, "Referer": "https://movie.douban.com/"},
         "parse": parse_douban_movie},
     "douban_tv": {"name": "豆瓣剧集",
-        "url": "https://movie.douban.com/j/search_subjects?type=tv&tag=%E7%83%AD%E9%97%A8&page_limit=30&page_start=0",
+        "url": "https://movie.douban.com/j/search_subjects?type=tv&tag=%E7%83%AD%E9%97%A8&page_limit=50&page_start=0",
         "hdrs": {"User-Agent": UA, "Referer": "https://movie.douban.com/"},
         "parse": parse_douban_tv},
 }
@@ -281,15 +316,9 @@ def save_cache(data):
     """保存缓存到文件"""
     global cache_data
     cache_data = data
-    # 调试打印
-    plat_counts = {}
-    for i in data.get('items', []):
-        p = i.get('platform', 'unknown')
-        plat_counts[p] = plat_counts.get(p, 0) + 1
-    print(f"  缓存已保存: {len(data.get('items', []))} 条, 平台: {plat_counts}")
     try:
         with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False)
+            json.dump(cache_data, f, ensure_ascii=False)
     except Exception as e:
         print(f"  缓存保存失败: {e}")
 
@@ -333,16 +362,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         now = int(time.time() * 1000)
         cache_age = now - cache_data.get("updated", 0)
 
-        # 调试：打印当前缓存状态
-        plat_counts = {}
-        for i in cache_data.get('items', []):
-            p = i.get('platform', 'unknown')
-            plat_counts[p] = plat_counts.get(p, 0) + 1
-        print(f"[API] cache_data状态: {len(cache_data.get('items', []))}条, 平台: {plat_counts}, age: {cache_age}ms")
-
         # 优先级1: 缓存有效（5分钟内），直接返回
         if cache_data.get("items") and cache_age < CACHE_TTL * 1000:
-            print("[API] 使用缓存命中")
             body = json.dumps(cache_data, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
