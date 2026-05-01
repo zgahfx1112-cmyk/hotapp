@@ -223,7 +223,7 @@ PLATFORMS = {
                  "Origin": "https://www.bilibili.com"},
         "parse": parse_bilibili},
     "bilibili_pop": {"name": "B站热门",
-        "url": "https://api.bilibili.com/x/web-interface/popular?ps=100",
+        "url": "https://api.bilibili.com/x/web-interface/popular?ps=50",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.bilibili.com/",
                  "Accept": "application/json, text/plain, */*",
                  "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
