@@ -27,7 +27,8 @@ def parse_weibo(data):
     return [{"id": f"weibo_{i}", "title": x.get("note") or x.get("word", ""),
              "url": f"https://s.weibo.com/weibo?q={urllib.parse.quote(x.get('note') or x.get('word',''))}",
              "platform": "weibo", "rank": i+1,
-             "heatScore": x.get("num") or x.get("raw_hot") or (9000-i*200)} for i,x in enumerate(items[:50])]
+             "heatScore": x.get("num") or x.get("raw_hot") or (9000-i*200),
+             "image": x.get("icon") or None} for i,x in enumerate(items[:50])]
 
 def parse_bilibili(data):
     items = (data.get("data", {}) or {}).get("trending", {}) or {}
@@ -35,7 +36,8 @@ def parse_bilibili(data):
     return [{"id": f"bilibili_{i}", "title": x.get("show_name") or x.get("keyword",""),
              "url": f"https://search.bilibili.com/all?keyword={urllib.parse.quote(x.get('keyword') or x.get('show_name',''))}",
              "platform": "bilibili", "rank": i+1,
-             "heatScore": x.get("heat_score") or (8000-i*300)} for i,x in enumerate(items[:50])]
+             "heatScore": x.get("heat_score") or (8000-i*300),
+             "image": x.get("icon") or None} for i,x in enumerate(items[:50])]
 
 def parse_douyin(data):
     items = (data.get("data", {}) or {}).get("trending_list") or []
@@ -65,7 +67,8 @@ def parse_baidu(raw):
         return [{"id": f"baidu_{i}", "title": x.get("word") or x.get("query",""),
                  "url": x.get("url") or f"https://www.baidu.com/s?wd={urllib.parse.quote(x.get('word',''))}",
                  "platform": "baidu", "rank": i+1,
-                 "heatScore": int(x.get("hotScore", 0) or (8500-i*180))} for i,x in enumerate(content[:50])]
+                 "heatScore": int(x.get("hotScore", 0) or (8500-i*180)),
+                 "image": x.get("img") or None} for i,x in enumerate(content[:50])]
     except Exception:
         return []
 
@@ -87,7 +90,8 @@ def parse_douban_movie(data):
     return [{"id": f"douban_movie_{i}", "title": x.get("title", ""),
              "url": x.get("url") or f"https://movie.douban.com/subject/{x.get('id','')}",
              "platform": "douban", "rank": i+1,
-             "heatScore": int(float(x.get("rate", 0) or 0) * 1000) or (7000-i*100)} for i,x in enumerate(items[:30])]
+             "heatScore": int(float(x.get("rate", 0) or 0) * 1000) or (7000-i*100),
+             "image": x.get("cover") or None} for i,x in enumerate(items[:30])]
 
 def parse_douban_tv(data):
     items = data.get("subjects") or []
@@ -95,7 +99,8 @@ def parse_douban_tv(data):
     return [{"id": f"douban_tv_{i}", "title": x.get("title", ""),
              "url": x.get("url") or f"https://movie.douban.com/subject/{x.get('id','')}",
              "platform": "douban", "rank": i+1,
-             "heatScore": int(float(x.get("rate", 0) or 0) * 1000) or (6500-i*100)} for i,x in enumerate(items[:30])]
+             "heatScore": int(float(x.get("rate", 0) or 0) * 1000) or (6500-i*100),
+             "image": x.get("cover") or None} for i,x in enumerate(items[:30])]
 
 def parse_tieba(data):
     items = (data.get("data", {}) or {}).get("bang_topic", {}) or {}
@@ -103,14 +108,16 @@ def parse_tieba(data):
     return [{"id": f"tieba_{x.get('topic_id', i)}", "title": x.get("topic_name", ""),
              "url": x.get("topic_url") or f"https://tieba.baidu.com/hottopic/browse/hottopic?topic_id={x.get('topic_id','')}",
              "platform": "tieba", "rank": i+1,
-             "heatScore": x.get("discuss_num") or (7500-i*80)} for i,x in enumerate(items[:30])]
+             "heatScore": x.get("discuss_num") or (7500-i*80),
+             "image": x.get("topic_pic") or None} for i,x in enumerate(items[:30])]
 
 def parse_bilibili_popular(data):
     items = data.get("data", {}).get("list") or []
     return [{"id": f"bili_pop_{i}", "title": x.get("title", ""),
              "url": f"https://www.bilibili.com/video/{x.get('bvid','')}",
              "platform": "bilibili_pop", "rank": i+1,
-             "heatScore": x.get("stat", {}).get("view") or (6000-i*50)} for i,x in enumerate(items[:30])]
+             "heatScore": x.get("stat", {}).get("view") or (6000-i*50),
+             "image": x.get("pic") or None} for i,x in enumerate(items[:30])]
 
 def parse_36kr(data):
     if isinstance(data, str):
@@ -172,7 +179,8 @@ def parse_ithome(data):
             "url": url,
             "platform": "ithome",
             "rank": i+1,
-            "heatScore": int(hits) if hits > 0 else (4500 - i * 50)
+            "heatScore": int(hits) if hits > 0 else (4500 - i * 50),
+            "image": x.get("image") or None
         })
     return result
 
