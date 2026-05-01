@@ -28,7 +28,7 @@ def parse_weibo(data):
              "url": f"https://s.weibo.com/weibo?q={urllib.parse.quote(x.get('note') or x.get('word',''))}",
              "platform": "weibo", "rank": i+1,
              "heatScore": x.get("num") or x.get("raw_hot") or (9000-i*200),
-             "image": x.get("icon") or None} for i,x in enumerate(items[:50])]
+             "image": x.get("icon") or None} for i,x in enumerate(items[:100])]  # 增加到100条
 
 def parse_bilibili(data):
     items = (data.get("data", {}) or {}).get("trending", {}) or {}
@@ -37,12 +37,12 @@ def parse_bilibili(data):
              "url": f"https://search.bilibili.com/all?keyword={urllib.parse.quote(x.get('keyword') or x.get('show_name',''))}",
              "platform": "bilibili", "rank": i+1,
              "heatScore": x.get("heat_score") or (8000-i*300),
-             "image": x.get("icon") or None} for i,x in enumerate(items[:50])]
+             "image": x.get("icon") or None} for i,x in enumerate(items[:100])]  # 增加到100条
 
 def parse_douyin(data):
     items = (data.get("data", {}) or {}).get("trending_list") or []
     result = []
-    for i, x in enumerate(items[:50]):
+    for i, x in enumerate(items[:100]):  # 增加到100条
         cover = x.get("word_cover") or {}
         urls = cover.get("url_list") or []
         img = urls[0] if urls else None
@@ -68,20 +68,45 @@ def parse_baidu(raw):
                  "url": x.get("url") or f"https://www.baidu.com/s?wd={urllib.parse.quote(x.get('word',''))}",
                  "platform": "baidu", "rank": i+1,
                  "heatScore": int(x.get("hotScore", 0) or (8500-i*180)),
-                 "image": x.get("img") or None} for i,x in enumerate(content[:50])]
+                 "image": x.get("img") or None} for i,x in enumerate(content[:100])]  # 增加到100条
     except Exception:
         return []
 
 def parse_toutiao(data):
     items = data.get("data") or []
     result = []
-    for i, x in enumerate(items[:50]):
+    for i, x in enumerate(items[:100]):  # 增加到100条
         img = (x.get("Image") or {}).get("url") or None
         result.append({"id": f"toutiao_{x.get('ClusterId', i)}", "title": x.get("Title") or x.get("QueryWord", ""),
                  "url": x.get("Url") or f"https://so.toutiao.com/search?keyword={urllib.parse.quote(x.get('QueryWord',''))}",
                  "platform": "toutiao", "rank": i+1,
                  "heatScore": int(x.get("HotValue", 0) or (9000-i*200)),
                  "image": img})
+    return result
+
+def parse_toutiao_feed(data):
+    """解析头条推荐流"""
+    if isinstance(data, str):
+        return []  # 非 JSON 响应，跳过
+    items = data.get("data") or []
+    result = []
+    for i, x in enumerate(items[:50]):
+        if isinstance(x, str):
+            continue
+        title = x.get("title") or x.get("abstract", "")
+        if not title:
+            continue
+        # 清理标题
+        title = title.replace("\n", "").replace("\r", "").strip()
+        result.append({
+            "id": f"toutiao_feed_{x.get('group_id', i)}",
+            "title": title,
+            "url": f"https://www.toutiao.com/item/{x.get('group_id', '')}",
+            "platform": "toutiao",
+            "rank": i+1,
+            "heatScore": x.get("comments_count", 0) or (8000-i*100),
+            "image": x.get("middle_image", {}).get("url") or None
+        })
     return result
 
 def parse_douban_movie(data):
@@ -91,7 +116,7 @@ def parse_douban_movie(data):
              "url": x.get("url") or f"https://movie.douban.com/subject/{x.get('id','')}",
              "platform": "douban", "rank": i+1,
              "heatScore": int(float(x.get("rate", 0) or 0) * 1000) or (7000-i*100),
-             "image": x.get("cover") or None} for i,x in enumerate(items[:30])]
+             "image": x.get("cover") or None} for i,x in enumerate(items[:100])]  # 增加到100条
 
 def parse_douban_tv(data):
     items = data.get("subjects") or []
@@ -100,7 +125,7 @@ def parse_douban_tv(data):
              "url": x.get("url") or f"https://movie.douban.com/subject/{x.get('id','')}",
              "platform": "douban", "rank": i+1,
              "heatScore": int(float(x.get("rate", 0) or 0) * 1000) or (6500-i*100),
-             "image": x.get("cover") or None} for i,x in enumerate(items[:30])]
+             "image": x.get("cover") or None} for i,x in enumerate(items[:100])]  # 增加到100条
 
 def parse_tieba(data):
     items = (data.get("data", {}) or {}).get("bang_topic", {}) or {}
@@ -109,7 +134,7 @@ def parse_tieba(data):
              "url": x.get("topic_url") or f"https://tieba.baidu.com/hottopic/browse/hottopic?topic_id={x.get('topic_id','')}",
              "platform": "tieba", "rank": i+1,
              "heatScore": x.get("discuss_num") or (7500-i*80),
-             "image": x.get("topic_pic") or None} for i,x in enumerate(items[:30])]
+             "image": x.get("topic_pic") or None} for i,x in enumerate(items[:100])]  # 增加到100条
 
 def parse_bilibili_popular(data):
     items = data.get("data", {}).get("list") or []
@@ -117,7 +142,7 @@ def parse_bilibili_popular(data):
              "url": f"https://www.bilibili.com/video/{x.get('bvid','')}",
              "platform": "bilibili_pop", "rank": i+1,
              "heatScore": x.get("stat", {}).get("view") or (6000-i*50),
-             "image": x.get("pic") or None} for i,x in enumerate(items[:30])]
+             "image": x.get("pic") or None} for i,x in enumerate(items[:100])]  # 增加到100条
 
 def parse_36kr(data):
     if isinstance(data, str):
@@ -134,7 +159,7 @@ def parse_36kr(data):
 def parse_sspai(data):
     items = data.get("list") or []
     result = []
-    for i, x in enumerate(items[:30]):
+    for i, x in enumerate(items[:100]):  # 增加到100条
         views = x.get("views_count", 0)
         if views is None or views == "" or views == 0:
             views = 5000 - i * 80
@@ -163,7 +188,7 @@ def parse_sspai(data):
 def parse_ithome(data):
     items = data.get("newslist") or []
     result = []
-    for i, x in enumerate(items[:50]):
+    for i, x in enumerate(items[:100]):  # 增加到100条
         # 清理 title 中的特殊字符
         title = (x.get("title") or "").replace("\n", "").replace("\r", "").replace('"', '').replace("'", "").strip()
         hits = x.get("hitcount", 0) or 0
@@ -190,15 +215,15 @@ PLATFORMS = {
         "hdrs": {"User-Agent": UA, "Referer": "https://weibo.com/", "X-Requested-With": "XMLHttpRequest"},
         "parse": parse_weibo},
     "bilibili": {"name": "B站热搜",
-        "url": "https://api.bilibili.com/x/web-interface/search/square?limit=50",
+        "url": "https://api.bilibili.com/x/web-interface/search/square?limit=100",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.bilibili.com/"},
         "parse": parse_bilibili},
     "bilibili_pop": {"name": "B站热门",
-        "url": "https://api.bilibili.com/x/web-interface/popular?ps=50",
+        "url": "https://api.bilibili.com/x/web-interface/popular?ps=100",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.bilibili.com/"},
         "parse": parse_bilibili_popular},
     "douyin": {"name": "抖音",
-        "url": "https://www.douyin.com/aweme/v1/web/hot/search/list/?detail_list=1&count=50",
+        "url": "https://www.douyin.com/aweme/v1/web/hot/search/list/?detail_list=1&count=100",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.douyin.com/"},
         "parse": parse_douyin},
     "baidu": {"name": "百度",
@@ -222,11 +247,11 @@ PLATFORMS = {
         "hdrs": {"User-Agent": UA, "Referer": "https://www.ithome.com/"},
         "parse": parse_ithome},
     "douban_movie": {"name": "豆瓣电影",
-        "url": "https://movie.douban.com/j/search_subjects?type=movie&tag=%E7%83%AD%E9%97%A8&page_limit=50&page_start=0",
+        "url": "https://movie.douban.com/j/search_subjects?type=movie&tag=%E7%83%AD%E9%97%A8&page_limit=100&page_start=0",
         "hdrs": {"User-Agent": UA, "Referer": "https://movie.douban.com/"},
         "parse": parse_douban_movie},
     "douban_tv": {"name": "豆瓣剧集",
-        "url": "https://movie.douban.com/j/search_subjects?type=tv&tag=%E7%83%AD%E9%97%A8&page_limit=50&page_start=0",
+        "url": "https://movie.douban.com/j/search_subjects?type=tv&tag=%E7%83%AD%E9%97%A8&page_limit=100&page_start=0",
         "hdrs": {"User-Agent": UA, "Referer": "https://movie.douban.com/"},
         "parse": parse_douban_tv},
 }
