@@ -134,7 +134,7 @@ Recommender.prototype.toggleInterest = function(tag) {
 };
 Recommender.prototype.recordView = function(item) {
   const keywords = extractKeywords(item.title);
-  this.history.push({ title: item.title, keywords, type: item.type, timestamp: Date.now() });
+  this.history.push({ title: item.title, url: item.url || '', keywords, type: item.type, timestamp: Date.now() });
   if (this.history.length > 200) this.history = this.history.slice(-200);
   localStorage.setItem('toutiao_history', JSON.stringify(this.history));
 };
@@ -638,12 +638,18 @@ function renderHistoryTab() {
   }
   const items = history.slice().reverse().slice(0, 100);
   area.innerHTML = `<div class="trending-list">${items.map(h => `
-    <div class="history-item">
+    <div class="history-item" data-hurl="${escapeHtml(h.url || '')}">
       <span class="hi-type">${h.type === 'rss' ? '资讯' : '热搜'}</span>
       <span class="hi-title">${escapeHtml(h.title)}</span>
       <span class="hi-time">${timeAgo(h.timestamp)}</span>
     </div>`).join('')}</div>
     <div class="history-clear"><button id="clearHistoryBtn">清空浏览历史</button></div>`;
+  document.querySelectorAll('.history-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const url = el.dataset.hurl;
+      if (url) window.open(url, '_blank');
+    });
+  });
   document.getElementById('clearHistoryBtn').addEventListener('click', () => {
     state.recommender.history = [];
     localStorage.setItem('toutiao_history', '[]');
