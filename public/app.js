@@ -423,9 +423,9 @@ function loadFeedPage() {
       card.className = 'feed-card';
       const starCls = isBookmarked(item.id) ? 'btn-star active' : 'btn-star';
       const starChar = isBookmarked(item.id) ? '⭐' : '☆';
-      card.innerHTML = `<button class="btn-close" data-id="${escapeHtml(item.id)}">✕</button><button class="${starCls}" data-id="${escapeHtml(item.id)}">${starChar}</button>${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
+      card.innerHTML = `<button class="btn-hide" data-id="${escapeHtml(item.id)}"><svg viewBox="0 0 24 24" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button><button class="${starCls}" data-id="${escapeHtml(item.id)}">${starChar}</button>${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-star') || e.target.closest('.btn-close')) return;
+        if (e.target.closest('.btn-star') || e.target.closest('.btn-hide')) return;
         state.recommender.recordView(item);
         if (item.url) window.open(item.url, '_blank');
       });
@@ -433,7 +433,7 @@ function loadFeedPage() {
         e.stopPropagation();
         toggleBookmark(item);
       });
-      card.querySelector('.btn-close').addEventListener('click', (e) => {
+      card.querySelector('.btn-hide').addEventListener('click', (e) => {
         e.stopPropagation();
         addDislike(item.title);
         card.classList.add('fade-out');
@@ -638,7 +638,7 @@ function renderHistoryTab() {
   }
   const items = history.slice().reverse().slice(0, 100);
   area.innerHTML = `<div class="trending-list">${items.map(h => `
-    <div class="history-item" data-hurl="${escapeHtml(h.url || '')}">
+    <div class="history-item" data-hurl="${escapeHtml(h.url || '')}" data-htitle="${escapeHtml(h.title)}">
       <span class="hi-type">${h.type === 'rss' ? '资讯' : '热搜'}</span>
       <span class="hi-title">${escapeHtml(h.title)}</span>
       <span class="hi-time">${timeAgo(h.timestamp)}</span>
@@ -646,7 +646,13 @@ function renderHistoryTab() {
     <div class="history-clear"><button id="clearHistoryBtn">清空浏览历史</button></div>`;
   document.querySelectorAll('.history-item').forEach(el => {
     el.addEventListener('click', () => {
-      const url = el.dataset.hurl;
+      let url = el.dataset.hurl;
+      // Fallback: lookup by title in current data
+      if (!url) {
+        const title = el.dataset.htitle;
+        const found = state.articles.find(a => a.title === title) || state.hotItems.find(h => h.title === title);
+        if (found) url = found.link || found.url || '';
+      }
       if (url) window.open(url, '_blank');
     });
   });
