@@ -23,19 +23,6 @@ const state = {
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
 
-// Per-user seed: each browser gets unique, consistent shuffle
-function getUserId() {
-  let id = localStorage.getItem('userId');
-  if (!id) { id = Math.random().toString(36).substring(2,10); localStorage.setItem('userId', id); }
-  return id;
-}
-function hashCode(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
-  return h;
-}
-const USER_SEED = getUserId();
-
 // ── Init ──
 
 async function init() {
@@ -226,10 +213,8 @@ function buildHybridFeed() {
     // Freshness
     score += Math.max(0, 10 - ageMin * 0.5);
 
-    // User-specific jitter: per-user + per-day rotation
-    const dayStr = new Date().toISOString().slice(0,10);
-    const seedHash = Math.abs(hashCode(USER_SEED + '|' + dayStr + '|' + item.id));
-    score += ((seedHash % 1000) / 1000 - 0.5) * 8;
+    // Random jitter: ±15 — fresh order every refresh
+    score += (Math.random() - 0.5) * 30;
 
     // Reason
     let reason = '热门推荐';
