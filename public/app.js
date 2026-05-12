@@ -327,16 +327,10 @@ function buildHybridFeed() {
 // ── Daily Digest ──
 
 function renderDailyDigest() {
-  const today = new Date().toISOString().slice(0, 10);
-  let lastDigest = '';
-  try { lastDigest = localStorage.getItem('toutiao_lastDigest') || ''; } catch {}
-  if (lastDigest === today) return '';
-
-  // Build top 5 from hot items
+  // Always show: top 5 from hot items
   const top5 = state.hotItems.slice(0, 5);
   if (!top5.length) return '';
 
-  localStorage.setItem('toutiao_lastDigest', today);
   const items = top5.map((h, i) => {
     const plat = getPlatformName(h.platform);
     return `<div class="digest-item" onclick="window.open('${escapeHtml(h.url || '#')}','_blank')">
@@ -347,7 +341,7 @@ function renderDailyDigest() {
   }).join('');
 
   return `<div class="digest-card">
-    <div class="digest-header">📋 今日热榜 Top 5</div>
+    <div class="digest-header">📋 实时热榜 Top 5</div>
     ${items}
   </div>`;
 }
@@ -950,9 +944,9 @@ function getUserStats() {
   stats.daysUsed = days;
   stats.bookmarkCount = getBookmarks().length;
   stats.readCount = state.recommender.history.length;
-  // Update footer stats
-  const sb = $('#statsBar');
-  if (sb) sb.textContent = `📖 已读 ${stats.readCount} 篇 · ⭐ 收藏 ${stats.bookmarkCount} 篇 · 📅 已用 ${stats.daysUsed} 天`;
+  // Update header stats
+  const hs = $('#headerStats');
+  if (hs) hs.textContent = `📖${stats.readCount} ⭐${stats.bookmarkCount} 📅${stats.daysUsed}天`;
   localStorage.setItem('toutiao_userStats', JSON.stringify({ ...stats, bookmarkCount: undefined, readCount: undefined }));
   return stats;
 }
