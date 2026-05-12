@@ -498,7 +498,7 @@ function renderHotList() {
         </div>
         <div class="heat-bar"><div class="heat-bar-fill" style="width:${pct}%"></div></div>
       </div>
-      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" data-hid="${item.id}" style="flex-shrink:0;font-size:16px;cursor:pointer;color:${starred ? '#f0a030' : '#ccc'};transition:var(--transition)">${starred ? '⭐' : '☆'}</span>
+      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" data-hid="${item.id}" style="flex-shrink:0;font-size:20px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);margin-left:auto;padding:4px">${starred ? '⭐' : '☆'}</span>
     </div>`;
   }).join('');
 
@@ -558,7 +558,7 @@ function renderRssList() {
     const starred = isBookmarked(bmId);
     return `<article class="rss-article-card" style="position:relative" data-bmid="${bmId}">
       ${img}
-      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" style="position:absolute;top:8px;right:8px;z-index:2;font-size:14px;cursor:pointer;color:${starred ? '#f0a030' : '#ccc'};transition:var(--transition);background:rgba(255,255,255,0.85);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center">${starred ? '⭐' : '☆'}</span>
+      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" style="position:absolute;top:8px;right:8px;z-index:2;font-size:18px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);background:rgba(255,255,255,0.9);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.12)">${starred ? '⭐' : '☆'}</span>
       <div class="card-header">
         <span class="source-badge">${escapeHtml(a.source_name)}</span>
         <span class="card-time">${formatTime(a.pub_date)}</span>
