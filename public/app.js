@@ -621,6 +621,11 @@ function renderRssTab() {
     loadArticles(100, state.rssFilter).then(() => renderRssList());
   });
 
+  // Freshness indicator
+  const srcCount = state.sources.length;
+  const lastFetch = state.stats?.lastFetch ? formatTime(state.stats.lastFetch) : '尚未更新';
+  area.insertAdjacentHTML('beforeend', `<div class="rss-freshness">📡 ${srcCount} 个数据源 · 最近更新: ${lastFetch}</div>`);
+
   area.insertAdjacentHTML('beforeend', '<div class="trending-list" id="rssList"></div>');
   loadArticles(100, state.rssFilter).then(() => renderRssList());
 }
@@ -651,6 +656,7 @@ function renderRssList() {
       </div>
       <h3 class="card-title"><a href="${escapeHtml(a.link || '#')}" target="_blank" rel="noopener">${escapeHtml(a.title)}</a></h3>
       ${summary ? `<p class="card-summary card-summary-clamp" data-expanded="false">${escapeHtml(summary)}</p><button class="summary-toggle">展开全文</button>` : ''}
+      <div class="card-actions"><button class="btn-read" data-url="${escapeHtml(a.link || '#')}">📖 阅读</button></div>
     </article>`;
   }).join('');
 
@@ -682,6 +688,15 @@ function renderRssList() {
       p.dataset.expanded = expanded ? 'false' : 'true';
       p.classList.toggle('card-summary-clamp', expanded);
       btn.textContent = expanded ? '展开全文' : '收起';
+    });
+  });
+
+  // Reading mode trigger
+  list.querySelectorAll('.btn-read').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      openReadingMode(btn.dataset.url);
     });
   });
 }
@@ -878,7 +893,7 @@ function setupTabs() {
 // ── Helpers ──
 
 function getPlatformName(key) {
-  const map = { weibo: '微博', bilibili: 'B站热搜', bilibili_pop: 'B站热门', douyin: '抖音', baidu: '百度', toutiao: '头条', tieba: '贴吧', sspai: '少数派', ithome: 'IT之家', '36kr': '36氪' };
+  const map = { weibo: '微博', bilibili: 'B站热搜', bilibili_pop: 'B站热门', douyin: '抖音', baidu: '百度', toutiao: '头条', tieba: '贴吧', sspai: '少数派', ithome: 'IT之家', '36kr': '36氪', zhihu: '知乎', hupu: '虎扑', '36kr_hot': '36氪热榜' };
   return map[key] || key;
 }
 
@@ -965,6 +980,45 @@ function registerSW() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
+}
+
+// ── Reading Mode ──
+
+async function openReadingMode(url) {
+  if (!url || url === '#') { showToast('暂无原文链接'); return; }
+  showToast('加载中...');
+  try {
+    const res = await fetch(`/api/read?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    renderReadingModal(data.title, data.text, data.source);
+  } catch (e) {
+    showToast('加载失败');
+  }
+}
+
+function renderReadingModal(title, text, source) {
+  const existing = document.querySelector('.reading-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'reading-overlay';
+  overlay.innerHTML = `
+    <div class="reading-box">
+      <div class="reading-header">
+        <span class="reading-source">${escapeHtml(source)}</span>
+        <button class="reading-close">&times;</button>
+      </div>
+      <h2 class="reading-title">${escapeHtml(title || '')}</h2>
+      <div class="reading-body">
+        ${text ? escapeHtml(text).replace(/\n/g, '<br>') : '<p style="color:var(--text-muted)">内容加载失败</p>'}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('.reading-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
 }
 
 // ── Pull-to-refresh ──

@@ -189,6 +189,52 @@ def parse_ithome(data):
         })
     return result
 
+def parse_zhihu(data):
+    items = data.get("data") or []
+    result = []
+    for i, x in enumerate(items[:50]):
+        target = x.get("target") or {}
+        title = target.get("title", "")
+        if not title:
+            continue
+        url = target.get("url", "")
+        if url and not url.startswith("http"):
+            url = f"https://www.zhihu.com{url}"
+        detail = x.get("detail_text", "")
+        heat = 5000
+        if detail:
+            m = re.search(r"(\d+(?:\.\d+)?)\s*万", str(detail))
+            if m:
+                heat = int(float(m.group(1)) * 10000)
+            else:
+                m2 = re.search(r"(\d+)", str(detail))
+                if m2:
+                    heat = int(m2.group(1))
+        result.append({
+            "id": f"zhihu_{i}", "title": title,
+            "url": url or f"https://www.zhihu.com/hot",
+            "platform": "zhihu", "rank": i+1,
+            "heatScore": heat, "image": None
+        })
+    return result
+
+def parse_hupu(raw):
+    result = []
+    pattern = re.compile(r'<div class="t-title">.*?<a[^>]*href="([^"]*)"[^>]*>([^<]+)</a>', re.DOTALL)
+    matches = pattern.findall(raw)
+    for i, (href, title) in enumerate(matches[:50]):
+        title = title.strip()
+        if not title:
+            continue
+        url = href if href.startswith("http") else f"https://bbs.hupu.com{href}"
+        result.append({
+            "id": f"hupu_{i}", "title": title,
+            "url": url, "platform": "hupu",
+            "rank": i+1, "heatScore": int(5000 - i * 80),
+            "image": None
+        })
+    return result
+
 PLATFORMS = {
     "weibo": {"name": "微博",
         "url": "https://weibo.com/ajax/side/hotSearch",
@@ -234,6 +280,18 @@ PLATFORMS = {
         "url": "https://api.ithome.com/json/newslist/news",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.ithome.com/"},
         "parse": parse_ithome},
+    "zhihu": {"name": "知乎热榜",
+        "url": "https://www.zhihu.com/api/v3/feed/topstory/hot-lists",
+        "hdrs": {"User-Agent": UA, "Referer": "https://www.zhihu.com/"},
+        "parse": parse_zhihu},
+    "hupu": {"name": "虎扑",
+        "url": "https://bbs.hupu.com/all",
+        "hdrs": {"User-Agent": UA, "Referer": "https://bbs.hupu.com/"},
+        "parse": parse_hupu},
+    "36kr_hot": {"name": "36氪热榜",
+        "url": "https://api.36kr.com/app/api/newsflash?page=1&size=30",
+        "hdrs": {"User-Agent": UA, "Referer": "https://36kr.com/"},
+        "parse": parse_36kr},
 }
 
 def fetch_one(key, cfg):

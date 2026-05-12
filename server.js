@@ -42,6 +42,56 @@ app.get('/api/stats', (req, res) => {
   res.json(getStats());
 });
 
+// ── Reading Mode proxy ──
+
+app.get('/api/read', async (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+
+  try {
+    const parsed = new URL(url);
+    if (!parsed.protocol.startsWith('http')) throw new Error();
+  } catch {
+    return res.status(400).json({ error: 'Invalid url' });
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const fetchRes = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    });
+    clearTimeout(timeout);
+    const html = await fetchRes.text();
+
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : '';
+
+    let text = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#\d+;/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (text.length > 5000) text = text.substring(0, 5000) + '...';
+
+    res.json({ title, text, source: url });
+  } catch (err) {
+    res.json({ title: '', text: '', source: url, error: err.message });
+  }
+});
+
 // ── HotApp proxy (/api/hot/* → Python :8000) ──
 
 app.use('/api/hot', (req, res) => {

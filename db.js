@@ -19,7 +19,7 @@ async function initDb(dbPath) {
   db.run(`CREATE TABLE IF NOT EXISTS sources (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    feed_url TEXT NOT NULL,
+    feed_url TEXT NOT NULL UNIQUE,
     enabled INTEGER DEFAULT 1
   )`);
 
