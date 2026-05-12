@@ -175,6 +175,7 @@ function buildHybridFeed() {
       url: h.url || '',
       image: h.image || null,
       source: getPlatformName(h.platform),
+      platform: h.platform,
       type: 'hot',
       heatScore: h.heatScore || 0,
       timestamp: h.timestamp || now
@@ -338,7 +339,7 @@ function loadFeedPage() {
         : `<div class="feed-img-wrap"><div class="fallback" style="background:${g};display:block"></div></div>`;
       const card = document.createElement('div');
       card.className = 'feed-card';
-      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.source.toLowerCase()}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
+      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
       card.addEventListener('click', () => {
         state.recommender.recordView(item);
         if (item.url) window.open(item.url, '_blank');
