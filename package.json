@@ -1,0 +1,19 @@
+{
+  "name": "toutiao-rss",
+  "version": "1.0.0",
+  "description": "Minimal RSS news aggregator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "node-cron": "^3.0.3",
+    "rss-parser": "^3.13.0",
+    "sql.js": "^1.12.0"
+  }
+}

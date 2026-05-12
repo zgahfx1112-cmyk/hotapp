@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>今日热榜 - 全网热点 & RSS新闻</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4f6ef6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="header-left">
+      <h1 class="logo">今日热榜</h1>
+      <span class="status-dot" id="statusDot" title="状态"></span>
+    </div>
+    <button class="btn-refresh" id="btnRefresh" title="刷新">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      <span>刷新</span>
+    </button>
+  </div>
+</header>
+
+<div class="main-container">
+  <nav class="tabs" id="mainTabs">
+    <button class="tab active" data-tab="recommend">智能推荐</button>
+    <button class="tab" data-tab="hot">热搜榜单</button>
+    <button class="tab" data-tab="rss">RSS订阅</button>
+  </nav>
+
+  <div id="errorBanner"></div>
+
+  <!-- ── Sub-tab areas ── -->
+  <div id="subTabBar"></div>
+
+  <!-- ── Content area ── -->
+  <div id="contentArea"></div>
+</div>
+
+<!-- Floating buttons -->
+<div class="floating-btns">
+  <button class="floating-btn" id="topBtn" title="回到顶部">
+    <svg viewBox="0 0 24 24"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+  </button>
+</div>
+
+<footer class="footer">
+  <p>数据来源：微博/B站/百度/抖音/头条/贴吧热搜 · RSS新闻源 · 每15分钟更新</p>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

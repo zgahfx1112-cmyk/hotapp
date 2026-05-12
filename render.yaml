@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: toutiao
+    env: node
+    region: singapore
+    buildCommand: python -m pip install -r hotapp/requirements.txt -q && npm install
+    startCommand: node server.js
+    healthCheckPath: /api/stats
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

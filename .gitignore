@@ -1,0 +1,5 @@
+node_modules/
+*.db
+hotapp/__pycache__/
+hotapp/cache.json
+.hotapp_cache
