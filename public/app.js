@@ -212,6 +212,9 @@ function buildHybridFeed() {
     // Freshness
     score += Math.max(0, 10 - ageMin * 0.5);
 
+    // Random jitter: ±3 for natural shuffle (same-band items reorder each load)
+    score += (Math.random() - 0.5) * 6;
+
     // Reason
     let reason = '热门推荐';
     for (const tag of state.recommender.interests) {
