@@ -175,7 +175,9 @@ function isBookmarked(id) {
 }
 function updateStarButtons() {
   document.querySelectorAll('.btn-star').forEach(el => {
-    el.classList.toggle('active', isBookmarked(el.dataset.id));
+    const bmed = isBookmarked(el.dataset.id);
+    el.classList.toggle('active', bmed);
+    el.textContent = bmed ? '⭐' : '☆';
   });
 }
 
@@ -420,7 +422,8 @@ function loadFeedPage() {
       const card = document.createElement('div');
       card.className = 'feed-card';
       const starCls = isBookmarked(item.id) ? 'btn-star active' : 'btn-star';
-      card.innerHTML = `<button class="btn-close" data-id="${escapeHtml(item.id)}">✕</button><button class="${starCls}" data-id="${escapeHtml(item.id)}">⭐</button>${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
+      const starChar = isBookmarked(item.id) ? '⭐' : '☆';
+      card.innerHTML = `<button class="btn-close" data-id="${escapeHtml(item.id)}">✕</button><button class="${starCls}" data-id="${escapeHtml(item.id)}">${starChar}</button>${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
       card.addEventListener('click', (e) => {
         if (e.target.closest('.btn-star') || e.target.closest('.btn-close')) return;
         state.recommender.recordView(item);
