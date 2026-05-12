@@ -17,7 +17,11 @@ const state = {
   feedPage: 0,
   feedLoading: false,
   feedExhausted: false,
-  feedObserver: null
+  feedObserver: null,
+  hotPage: 0,
+  hotLoading: false,
+  hotExhausted: false,
+  hotObserver: null
 };
 
 const $ = sel => document.querySelector(sel);
@@ -34,6 +38,7 @@ async function init() {
   initTheme();
 
   await Promise.all([loadSources(), loadArticles(200), loadHotData(), loadStats()]);
+  getUserStats();
   renderTab();
   renderInterestTags();
   setupTabs();
@@ -319,6 +324,34 @@ function buildHybridFeed() {
   return scored;
 }
 
+// ── Daily Digest ──
+
+function renderDailyDigest() {
+  const today = new Date().toISOString().slice(0, 10);
+  let lastDigest = '';
+  try { lastDigest = localStorage.getItem('toutiao_lastDigest') || ''; } catch {}
+  if (lastDigest === today) return '';
+
+  // Build top 5 from hot items
+  const top5 = state.hotItems.slice(0, 5);
+  if (!top5.length) return '';
+
+  localStorage.setItem('toutiao_lastDigest', today);
+  const items = top5.map((h, i) => {
+    const plat = getPlatformName(h.platform);
+    return `<div class="digest-item" onclick="window.open('${escapeHtml(h.url || '#')}','_blank')">
+      <span class="rank-num ${i === 0 ? 'top1' : (i < 3 ? 'top3' : '')}" style="font-size:14px;min-width:20px">${i + 1}</span>
+      <span class="digest-title">${escapeHtml(h.title)}</span>
+      <span class="platform-badge ${h.platform}" style="flex-shrink:0">${plat}</span>
+    </div>`;
+  }).join('');
+
+  return `<div class="digest-card">
+    <div class="digest-header">📋 今日热榜 Top 5</div>
+    ${items}
+  </div>`;
+}
+
 // ── Tab rendering ──
 
 function renderTab() {
@@ -348,6 +381,9 @@ function renderSubTabs(items, activeKey, onClick) {
 function renderRecommendTab() {
   const area = $('#contentArea');
 
+  // Daily digest
+  const digestHtml = renderDailyDigest();
+
   // Interest tags
   renderInterestTags();
 
@@ -358,6 +394,7 @@ function renderRecommendTab() {
   }
 
   area.innerHTML = `
+    ${digestHtml}
     <div class="feed-grid" id="feedGrid"></div>
     <div class="feed-sentinel" id="feedSentinel"></div>
     <div class="feed-loading" id="feedLoading">⏳ 加载中...</div>
@@ -367,6 +404,12 @@ function renderRecommendTab() {
   const disliked = getDisliked();
   if (disliked.length) {
     area.insertAdjacentHTML('beforeend', `<div class="dislike-bar" id="dislikeBar">已屏蔽 ${disliked.length} 个关键词 · 点击管理</div>`);
+  }
+
+  // Reason breakdown
+  const interests = state.recommender.interests;
+  if (interests.length) {
+    area.insertAdjacentHTML('beforeend', `<div class="reason-summary">推荐依据：${interests.map(t => `<span class="reason-tag">${t}</span>`).join('')}</div>`);
   }
 
   feedInit();
@@ -435,10 +478,14 @@ function loadFeedPage() {
       });
       card.querySelector('.btn-hide').addEventListener('click', (e) => {
         e.stopPropagation();
+        const titleKws = extractKeywords(item.title);
         addDislike(item.title);
         card.classList.add('fade-out');
         setTimeout(() => { card.remove(); }, 300);
         state.feedItems = buildHybridFeed();
+        // Show feedback toast
+        const kw = titleKws.length ? titleKws[0] : item.title.slice(0, 10);
+        showToast(`已减少"${kw}"相关内容`);
       });
       grid.appendChild(card);
     });
@@ -461,15 +508,32 @@ function renderHotTab() {
   renderSubTabs(platList, state.hotFilter, (key) => {
     state.hotFilter = key;
     localStorage.setItem('toutiao_hotFilter', key || '');
+    hotResetPagination();
     renderHotList();
   });
 
   // Error banner
   renderErrorBanner();
 
-  // List
-  area.insertAdjacentHTML('beforeend', '<div class="trending-list" id="trendingList"></div>');
+  // List + sentinel
+  area.insertAdjacentHTML('beforeend', '<div class="trending-list" id="trendingList"></div><div class="feed-sentinel" id="hotSentinel"></div><div class="feed-loading" id="hotLoading" style="display:none">⏳ 加载中...</div>');
+
+  hotResetPagination();
   renderHotList();
+}
+
+function hotResetPagination() {
+  state.hotPage = 0;
+  state.hotLoading = false;
+  state.hotExhausted = false;
+  if (state.hotObserver) state.hotObserver.disconnect();
+  state.hotObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && !state.hotLoading && !state.hotExhausted) {
+      renderHotList();
+    }
+  }, { rootMargin: '300px' });
+  const sentinel = $('#hotSentinel');
+  if (sentinel) state.hotObserver.observe(sentinel);
 }
 
 function renderHotList() {
@@ -484,14 +548,30 @@ function renderHotList() {
     return;
   }
 
+  const pageSize = 20;
+  const start = state.hotPage * pageSize;
+  const end = start + pageSize;
+  const batch = items.slice(start, end);
+
+  if (!batch.length) {
+    state.hotExhausted = true;
+    const loading = $('#hotLoading');
+    if (loading) { loading.textContent = '✨ 已加载全部'; }
+    return;
+  }
+
   const maxHeat = Math.max(...items.map(i => i.heatScore || 1), 1);
-  list.innerHTML = items.map((item, i) => {
-    const rc = i === 0 ? 'top1' : (i < 3 ? 'top3' : '');
+  const frag = document.createDocumentFragment();
+  batch.forEach((item, i) => {
+    const idx = start + i;
+    const rc = idx === 0 ? 'top1' : (idx < 3 ? 'top3' : '');
     const pct = Math.round((item.heatScore / maxHeat) * 100);
     const bmId = 'h_' + item.id;
     const starred = isBookmarked(bmId);
-    return `<div class="trending-item" data-id="${item.id}">
-      <span class="rank-num ${rc}">${i + 1}</span>
+    const div = document.createElement('div');
+    div.className = 'trending-item';
+    div.dataset.id = item.id;
+    div.innerHTML = `<span class="rank-num ${rc}">${idx + 1}</span>
       <div class="trending-info">
         <div class="trending-title">${escapeHtml(item.title)}</div>
         <div class="trending-meta">
@@ -501,32 +581,40 @@ function renderHotList() {
         </div>
         <div class="heat-bar"><div class="heat-bar-fill" style="width:${pct}%"></div></div>
       </div>
-      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" data-hid="${item.id}" style="flex-shrink:0;font-size:20px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);margin-left:auto;padding:4px">${starred ? '⭐' : '☆'}</span>
-    </div>`;
-  }).join('');
-
-  list.querySelectorAll('.trending-item').forEach(el => {
-    el.addEventListener('click', (e) => {
+      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" data-hid="${item.id}" style="flex-shrink:0;font-size:20px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);margin-left:auto;padding:4px">${starred ? '⭐' : '☆'}</span>`;
+    div.addEventListener('click', (e) => {
       if (e.target.closest('.bm-star')) return;
-      const item = state.hotItems.find(i => i.id === el.dataset.id);
-      if (item) { state.recommender.recordView(item); if (item.url) window.open(item.url, '_blank'); }
+      const found = state.hotItems.find(x => String(x.id) === div.dataset.id);
+      if (found) { state.recommender.recordView(found); if (found.url) window.open(found.url, '_blank'); }
     });
-  });
-  list.querySelectorAll('.bm-star').forEach(el => {
-    el.addEventListener('click', (e) => {
+    div.querySelector('.bm-star').addEventListener('click', (e) => {
       e.stopPropagation();
-      const bmId = el.dataset.bmid;
-      const item = state.hotItems.find(i => String(i.id) === el.dataset.hid);
-      if (item) {
-        const bm = { id: bmId, title: item.title, url: item.url || '', source: getPlatformName(item.platform), type: 'hot', platform: item.platform, image: item.image || null };
+      const el = e.currentTarget;
+      const found = state.hotItems.find(x => String(x.id) === el.dataset.hid);
+      if (found) {
+        const bm = { id: el.dataset.bmid, title: found.title, url: found.url || '', source: getPlatformName(found.platform), type: 'hot', platform: found.platform, image: found.image || null };
         toggleBookmark(bm);
-        const starred = isBookmarked(bmId);
-        el.textContent = starred ? '⭐' : '☆';
-        el.style.color = starred ? '#f0a030' : '#ccc';
-        el.classList.toggle('active', starred);
+        const starred2 = isBookmarked(el.dataset.bmid);
+        el.textContent = starred2 ? '⭐' : '☆';
+        el.style.color = starred2 ? '#f0a030' : '#ccc';
+        el.classList.toggle('active', starred2);
       }
     });
+    frag.appendChild(div);
   });
+  list.appendChild(frag);
+  state.hotPage++;
+
+  const loading = $('#hotLoading');
+  if (loading) {
+    if (state.hotPage * pageSize < items.length) {
+      loading.style.display = 'block';
+      loading.textContent = '⏳ 加载中...';
+    } else {
+      loading.style.display = 'block';
+      loading.textContent = '✨ 已加载全部';
+    }
+  }
 }
 
 function renderRssTab() {
@@ -551,7 +639,7 @@ function renderRssList() {
   if (state.rssFilter) items = items.filter(a => a.source_id === Number(state.rssFilter));
 
   if (!items.length) {
-    list.innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>暂无文章</p></div>`;
+    list.innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>暂无文章</p><p style="font-size:12px;margin-top:4px">点击右上角刷新按钮重新加载</p></div>`;
     return;
   }
 
@@ -559,6 +647,7 @@ function renderRssList() {
     const img = a.image_url ? `<div class="card-img-wrap"><img src="${escapeHtml(a.image_url)}" alt="" loading="lazy" onerror="this.closest('.card-img-wrap').remove()"></div>` : '';
     const bmId = 'rss_' + a.id;
     const starred = isBookmarked(bmId);
+    const summary = a.summary ? a.summary.replace(/<[^>]*>/g, '').trim() : '';
     return `<article class="rss-article-card" style="position:relative" data-bmid="${bmId}">
       ${img}
       <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" style="position:absolute;top:8px;right:8px;z-index:2;font-size:18px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);background:rgba(255,255,255,0.9);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.12)">${starred ? '⭐' : '☆'}</span>
@@ -567,7 +656,7 @@ function renderRssList() {
         <span class="card-time">${formatTime(a.pub_date)}</span>
       </div>
       <h3 class="card-title"><a href="${escapeHtml(a.link || '#')}" target="_blank" rel="noopener">${escapeHtml(a.title)}</a></h3>
-      ${a.summary ? `<p class="card-summary">${escapeHtml(a.summary)}</p>` : ''}
+      ${summary ? `<p class="card-summary card-summary-clamp" data-expanded="false">${escapeHtml(summary)}</p><button class="summary-toggle">展开全文</button>` : ''}
     </article>`;
   }).join('');
 
@@ -588,6 +677,19 @@ function renderRssList() {
       }
     });
   });
+
+  // Summary toggle
+  list.querySelectorAll('.summary-toggle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const p = btn.previousElementSibling;
+      if (!p || !p.classList.contains('card-summary')) return;
+      const expanded = p.dataset.expanded === 'true';
+      p.dataset.expanded = expanded ? 'false' : 'true';
+      p.classList.toggle('card-summary-clamp', expanded);
+      btn.textContent = expanded ? '展开全文' : '收起';
+    });
+  });
 }
 
 // ── Bookmark tab ──
@@ -599,19 +701,71 @@ function renderBookmarkTab() {
     area.innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><p>暂无收藏</p><p style="font-size:12px;margin-top:4px">在文章中点击 ⭐ 收藏</p></div>`;
     return;
   }
-  area.innerHTML = `<div class="trending-list">${items.map(item => `
+
+  const isBatch = area.dataset.batchMode === 'true';
+
+  area.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <span style="font-size:13px;color:var(--text-muted)">共 ${items.length} 篇</span>
+    <div style="display:flex;gap:6px">
+      <button class="sub-tab" id="exportBookmarksBtn" style="font-size:12px">📤 导出</button>
+      <button class="sub-tab ${isBatch ? 'active' : ''}" id="batchBookmarkBtn" style="font-size:12px">${isBatch ? '退出管理' : '批量管理'}</button>
+    </div>
+  </div>
+  <div class="trending-list" id="bookmarkList">${items.map(item => `
     <div class="trending-item" data-bmid="${escapeHtml(item.id)}">
+      ${isBatch ? `<input type="checkbox" class="bm-checkbox" data-bmid="${escapeHtml(item.id)}" style="margin-right:4px;flex-shrink:0">` : ''}
       <div class="trending-info">
         <div class="trending-title">${escapeHtml(item.title)}</div>
         <div class="trending-meta">
           <span class="platform-badge ${item.platform || 'ithome'}">${escapeHtml(item.source)}</span>
+          <span style="font-size:11px;color:var(--text-muted)">${item.timestamp ? timeAgo(item.timestamp) : ''}</span>
           <span style="cursor:pointer;color:var(--red)" class="unbookmark-btn" data-bmid="${escapeHtml(item.id)}">取消收藏</span>
         </div>
       </div>
-    </div>`).join('')}</div>`;
+    </div>`).join('')}</div>
+    ${isBatch ? '<div style="text-align:center;margin-top:8px"><button class="manage-clear" id="batchDeleteBtn">删除选中</button></div>' : ''}`;
+
+  // Export
+  const exportBtn = document.getElementById('exportBookmarksBtn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      const text = items.map((b, i) => `${i + 1}. ${b.title}${b.url ? `\n   ${b.url}` : ''}`).join('\n');
+      const blob = new Blob([`我的收藏 (${items.length} 篇)\n\n${text}`], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `toutiao-bookmarks-${new Date().toISOString().slice(0, 10)}.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToast('已导出');
+    });
+  }
+
+  // Batch toggle
+  const batchBtn = document.getElementById('batchBookmarkBtn');
+  if (batchBtn) {
+    batchBtn.addEventListener('click', () => {
+      area.dataset.batchMode = area.dataset.batchMode === 'true' ? 'false' : 'true';
+      renderBookmarkTab();
+    });
+  }
+
+  // Batch delete
+  const batchDel = document.getElementById('batchDeleteBtn');
+  if (batchDel) {
+    batchDel.addEventListener('click', () => {
+      const checked = document.querySelectorAll('.bm-checkbox:checked');
+      if (!checked.length) { showToast('请先选择要删除的收藏'); return; }
+      const ids = new Set(Array.from(checked).map(cb => cb.dataset.bmid));
+      let list = getBookmarks().filter(b => !ids.has(b.id));
+      localStorage.setItem('toutiao_bookmarks', JSON.stringify(list));
+      showToast(`已删除 ${ids.size} 篇`);
+      renderBookmarkTab();
+    });
+  }
+
   area.querySelectorAll('.trending-item').forEach(el => {
     el.addEventListener('click', (e) => {
-      if (e.target.closest('.unbookmark-btn')) return;
+      if (e.target.closest('.unbookmark-btn') || e.target.closest('.bm-checkbox')) return;
       const item = getBookmarks().find(b => b.id === el.dataset.bmid);
       if (item && item.url) window.open(item.url, '_blank');
     });
@@ -699,7 +853,10 @@ function renderErrorBanner() {
   const el = $('#errorBanner');
   const errors = state.hotErrors;
   if (errors && errors.length > 0) {
-    el.innerHTML = `<div class="error-banner">⚠️ 部分平台加载失败: ${errors.slice(0, 3).join('、')}<span class="retry-link" onclick="loadHotData().then(() => renderTab())">重试</span></div>`;
+    const lastOk = state.stats?.lastFetch ? formatTime(state.stats.lastFetch) : '';
+    el.innerHTML = `<div class="error-banner">⚠️ 部分平台加载失败: ${errors.slice(0, 3).join('、')}
+      ${lastOk ? `<span style="margin:0 8px;color:var(--text-muted)">上次成功 ${lastOk}</span>` : ''}
+      <span class="retry-link" onclick="loadHotData().then(() => renderTab())">重试</span></div>`;
   } else {
     el.innerHTML = '';
   }
@@ -773,9 +930,31 @@ function showToast(msg) {
   if (existing) existing.remove();
   const t = document.createElement('div');
   t.className = 'toast';
+  t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:999;background:var(--text-primary);color:var(--bg-primary);padding:8px 20px;border-radius:8px;font-size:13px;font-weight:500;box-shadow:0 2px 12px rgba(0,0,0,0.2);animation:toast-in 0.2s ease;';
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 1200);
+}
+
+// ── User stats ──
+
+function getUserStats() {
+  let stats = { readCount: 0, bookmarkCount: 0, daysUsed: 1, firstVisit: Date.now() };
+  try {
+    const raw = localStorage.getItem('toutiao_userStats');
+    if (raw) stats = JSON.parse(raw);
+  } catch {}
+  // Update days used
+  const first = stats.firstVisit;
+  const days = Math.max(1, Math.floor((Date.now() - first) / 86400000) + 1);
+  stats.daysUsed = days;
+  stats.bookmarkCount = getBookmarks().length;
+  stats.readCount = state.recommender.history.length;
+  // Update footer stats
+  const sb = $('#statsBar');
+  if (sb) sb.textContent = `📖 已读 ${stats.readCount} 篇 · ⭐ 收藏 ${stats.bookmarkCount} 篇 · 📅 已用 ${stats.daysUsed} 天`;
+  localStorage.setItem('toutiao_userStats', JSON.stringify({ ...stats, bookmarkCount: undefined, readCount: undefined }));
+  return stats;
 }
 
 function updateStatusDot(stats) {
@@ -784,7 +963,8 @@ function updateStatusDot(stats) {
   if (!stats.lastFetch) dot.classList.add('stale');
   else if (stats.articleCount > 0) dot.classList.add('ok');
   else dot.classList.add('stale');
-  dot.title = `${stats.articleCount} 篇文章 · ${stats.sourceCount} 个来源 · ${state.hotItems.length} 条热搜`;
+  const uiStats = getUserStats();
+  dot.title = `${stats.articleCount} 篇文章 · ${stats.sourceCount} 个来源 · ${state.hotItems.length} 条热搜\n已读 ${uiStats.readCount} · 收藏 ${uiStats.bookmarkCount} · 使用 ${uiStats.daysUsed} 天`;
 }
 
 function registerSW() {
@@ -792,6 +972,44 @@ function registerSW() {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
 }
+
+// ── Pull-to-refresh ──
+
+let ptrState = { startY: 0, pulling: false, moved: false };
+const PTR_THRESHOLD = 80;
+
+document.addEventListener('touchstart', (e) => {
+  if (window.scrollY > 10) return;
+  ptrState.startY = e.touches[0].clientY;
+  ptrState.pulling = true;
+  ptrState.moved = false;
+}, { passive: true });
+
+document.addEventListener('touchmove', (e) => {
+  if (!ptrState.pulling) return;
+  const dy = e.touches[0].clientY - ptrState.startY;
+  if (dy > 10) ptrState.moved = true;
+  if (ptrState.moved && dy > 0) {
+    const pull = Math.min(dy * 0.4, 60);
+    document.body.style.transform = `translateY(${pull}px)`;
+    document.body.style.transition = 'none';
+  }
+}, { passive: true });
+
+document.addEventListener('touchend', (e) => {
+  if (!ptrState.pulling) return;
+  ptrState.pulling = false;
+  document.body.style.transition = 'transform 0.3s ease';
+  document.body.style.transform = '';
+  if (ptrState.moved && (e.changedTouches[0].clientY - ptrState.startY) > PTR_THRESHOLD) {
+    // Trigger refresh
+    const btn = $('#btnRefresh');
+    if (btn && !btn.classList.contains('spinning')) {
+      showToast('↻ 刷新中...');
+      doRefresh();
+    }
+  }
+}, { passive: true });
 
 // ── Events ──
 

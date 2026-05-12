@@ -176,6 +176,9 @@ body {
 .card-title a { color: var(--text-primary); text-decoration: none; font-size: 16px; font-weight: 600; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .card-title a:hover { color: var(--accent); }
 .card-summary { font-size: 13px; color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-summary-clamp { -webkit-line-clamp: 2; }
+.card-summary[data-expanded="true"] { -webkit-line-clamp: unset; }
+.summary-toggle { font-size: 12px; color: var(--accent); cursor: pointer; background: none; border: none; padding: 2px 0; margin-top: 2px; }
 .card-img-wrap { margin: -16px -18px 12px; background: var(--bg-primary); max-height: 200px; overflow: hidden; }
 .card-img-wrap img { width: 100%; height: 180px; object-fit: cover; display: block; }
 
@@ -244,6 +247,9 @@ body {
 
 .dislike-bar { text-align: center; padding: 12px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
 .dislike-bar:hover { color: var(--text-primary); }
+
+.reason-summary { text-align: center; padding: 4px 12px 12px; font-size: 12px; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.reason-tag { display: inline-block; padding: 1px 8px; background: var(--accent); color: #fff; border-radius: 10px; font-size: 11px; }
 .manage-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 300; display: flex; align-items: center; justify-content: center; }
 .manage-box { background: var(--bg-card); border-radius: var(--radius); padding: 20px; max-width: 360px; width: 90%; max-height: 60vh; overflow-y: auto; border: 1px solid var(--border); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
 .manage-box h3 { font-size: 15px; margin-bottom: 12px; }
@@ -279,6 +285,19 @@ body {
 /* ── Footer ── */
 
 .footer { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; }
+
+/* ── Digest card ── */
+
+.digest-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
+.digest-header { font-size: 14px; font-weight: 700; margin-bottom: 10px; color: var(--text-primary); }
+.digest-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid var(--border); transition: var(--transition); }
+.digest-item:last-child { border-bottom: none; }
+.digest-item:hover { opacity: 0.8; }
+.digest-title { font-size: 13px; flex: 1; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ── Bookmark checkbox ── */
+
+.bm-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
 
 /* ── Scrollbar ── */
 
