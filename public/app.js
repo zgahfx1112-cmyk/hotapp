@@ -42,12 +42,14 @@ async function loadSources() {
   } catch (e) { console.error('Sources fail:', e); }
 }
 
-async function loadArticles(limit) {
+async function loadArticles(limit, sourceId) {
   try {
-    const res = await fetch(`/api/articles?limit=${limit}`);
+    const url = sourceId ? `/api/articles?limit=${limit}&source_id=${sourceId}` : `/api/articles?limit=${limit}`;
+    const res = await fetch(url);
     const data = await res.json();
     state.articles = data.articles;
     state.articlesTotal = data.total;
+    return data;
   } catch (e) {
     console.error('Articles fail:', e);
   }
@@ -413,12 +415,11 @@ function renderRssTab() {
   const sourceList = state.sources.map(s => ({ key: String(s.id), label: s.name }));
   renderSubTabs(sourceList, state.rssFilter, (key) => {
     state.rssFilter = key;
-    loadArticles(50);
-    renderRssList();
+    loadArticles(100, state.rssFilter).then(() => renderRssList());
   });
 
   area.insertAdjacentHTML('beforeend', '<div class="trending-list" id="rssList"></div>');
-  renderRssList();
+  loadArticles(100, state.rssFilter).then(() => renderRssList());
 }
 
 function renderRssList() {
