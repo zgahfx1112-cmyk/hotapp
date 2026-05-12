@@ -26,6 +26,13 @@ const $$ = sel => document.querySelectorAll(sel);
 // ── Init ──
 
 async function init() {
+  // Restore filters
+  try { state.rssFilter = localStorage.getItem('toutiao_rssFilter') || null; } catch {}
+  try { state.hotFilter = localStorage.getItem('toutiao_hotFilter') || null; } catch {}
+
+  // Restore theme
+  initTheme();
+
   await Promise.all([loadSources(), loadArticles(200), loadHotData(), loadStats()]);
   renderTab();
   renderInterestTags();
@@ -147,6 +154,67 @@ function extractKeywords(text) {
   return words;
 }
 
+// ── Bookmarks ──
+
+function getBookmarks() {
+  try { return JSON.parse(localStorage.getItem('toutiao_bookmarks') || '[]'); } catch { return []; }
+}
+function toggleBookmark(item) {
+  let list = getBookmarks();
+  const idx = list.findIndex(b => b.id === item.id);
+  if (idx >= 0) { list.splice(idx, 1); showToast('已取消收藏'); }
+  else {
+    list.unshift({ id: item.id, title: item.title, url: item.url, source: item.source, type: item.type, platform: item.platform || '', timestamp: Date.now(), image: item.image || null });
+    showToast('已收藏');
+  }
+  localStorage.setItem('toutiao_bookmarks', JSON.stringify(list));
+  updateStarButtons();
+}
+function isBookmarked(id) {
+  return getBookmarks().some(b => b.id === id);
+}
+function updateStarButtons() {
+  document.querySelectorAll('.btn-star').forEach(el => {
+    el.classList.toggle('active', isBookmarked(el.dataset.id));
+  });
+}
+
+// ── Dislike ──
+
+function getDisliked() {
+  try { return JSON.parse(localStorage.getItem('toutiao_disliked') || '[]'); } catch { return []; }
+}
+function addDislike(title) {
+  const kws = extractKeywords(title);
+  let list = getDisliked();
+  for (const kw of kws) { if (!list.includes(kw)) list.push(kw); }
+  localStorage.setItem('toutiao_disliked', JSON.stringify(list));
+}
+function removeDislike(kw) {
+  let list = getDisliked();
+  list = list.filter(k => k !== kw);
+  localStorage.setItem('toutiao_disliked', JSON.stringify(list));
+}
+function clearDisliked() {
+  localStorage.setItem('toutiao_disliked', '[]');
+}
+
+// ── Theme ──
+
+function initTheme() {
+  let theme = 'light';
+  try { theme = localStorage.getItem('toutiao_theme') || 'light'; } catch {}
+  if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  const btn = $('#btnTheme');
+  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  if (isDark) { html.removeAttribute('data-theme'); localStorage.setItem('toutiao_theme', 'light'); $('#btnTheme').textContent = '🌙'; }
+  else { html.setAttribute('data-theme', 'dark'); localStorage.setItem('toutiao_theme', 'dark'); $('#btnTheme').textContent = '☀️'; }
+}
+
 // ── Hybrid scoring ──
 
 function buildHybridFeed() {
@@ -216,6 +284,10 @@ function buildHybridFeed() {
     // Random jitter: ±15 — fresh order every refresh
     score += (Math.random() - 0.5) * 30;
 
+    // Dislike penalty
+    const disliked = getDisliked();
+    if (disliked.some(kw => item.title.includes(kw))) score -= 50;
+
     // Reason
     let reason = '热门推荐';
     for (const tag of state.recommender.interests) {
@@ -252,6 +324,8 @@ function renderTab() {
   if (state.currentTab === 'recommend') renderRecommendTab();
   else if (state.currentTab === 'hot') renderHotTab();
   else if (state.currentTab === 'rss') renderRssTab();
+  else if (state.currentTab === 'bookmark') renderBookmarkTab();
+  else if (state.currentTab === 'history') renderHistoryTab();
 }
 
 function renderSubTabs(items, activeKey, onClick) {
@@ -286,6 +360,12 @@ function renderRecommendTab() {
     <div class="feed-sentinel" id="feedSentinel"></div>
     <div class="feed-loading" id="feedLoading">⏳ 加载中...</div>
   `;
+
+  // Dislike management bar
+  const disliked = getDisliked();
+  if (disliked.length) {
+    area.insertAdjacentHTML('beforeend', `<div class="dislike-bar" id="dislikeBar">已屏蔽 ${disliked.length} 个关键词 · 点击管理</div>`);
+  }
 
   feedInit();
 }
@@ -339,10 +419,23 @@ function loadFeedPage() {
         : `<div class="feed-img-wrap"><div class="fallback" style="background:${g};display:block"></div></div>`;
       const card = document.createElement('div');
       card.className = 'feed-card';
-      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
-      card.addEventListener('click', () => {
+      const starCls = isBookmarked(item.id) ? 'btn-star active' : 'btn-star';
+      card.innerHTML = `<button class="btn-close" data-id="${escapeHtml(item.id)}">✕</button><button class="${starCls}" data-id="${escapeHtml(item.id)}">⭐</button>${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-star') || e.target.closest('.btn-close')) return;
         state.recommender.recordView(item);
         if (item.url) window.open(item.url, '_blank');
+      });
+      card.querySelector('.btn-star').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleBookmark(item);
+      });
+      card.querySelector('.btn-close').addEventListener('click', (e) => {
+        e.stopPropagation();
+        addDislike(item.title);
+        card.classList.add('fade-out');
+        setTimeout(() => { card.remove(); }, 300);
+        state.feedItems = buildHybridFeed();
       });
       grid.appendChild(card);
     });
@@ -364,6 +457,7 @@ function renderHotTab() {
 
   renderSubTabs(platList, state.hotFilter, (key) => {
     state.hotFilter = key;
+    localStorage.setItem('toutiao_hotFilter', key || '');
     renderHotList();
   });
 
@@ -391,6 +485,8 @@ function renderHotList() {
   list.innerHTML = items.map((item, i) => {
     const rc = i === 0 ? 'top1' : (i < 3 ? 'top3' : '');
     const pct = Math.round((item.heatScore / maxHeat) * 100);
+    const bmId = 'h_' + item.id;
+    const starred = isBookmarked(bmId);
     return `<div class="trending-item" data-id="${item.id}">
       <span class="rank-num ${rc}">${i + 1}</span>
       <div class="trending-info">
@@ -402,13 +498,30 @@ function renderHotList() {
         </div>
         <div class="heat-bar"><div class="heat-bar-fill" style="width:${pct}%"></div></div>
       </div>
+      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" data-hid="${item.id}" style="flex-shrink:0;font-size:16px;cursor:pointer;color:${starred ? '#f0a030' : '#ccc'};transition:var(--transition)">${starred ? '⭐' : '☆'}</span>
     </div>`;
   }).join('');
 
   list.querySelectorAll('.trending-item').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.bm-star')) return;
       const item = state.hotItems.find(i => i.id === el.dataset.id);
       if (item) { state.recommender.recordView(item); if (item.url) window.open(item.url, '_blank'); }
+    });
+  });
+  list.querySelectorAll('.bm-star').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const bmId = el.dataset.bmid;
+      const item = state.hotItems.find(i => String(i.id) === el.dataset.hid);
+      if (item) {
+        const bm = { id: bmId, title: item.title, url: item.url || '', source: getPlatformName(item.platform), type: 'hot', platform: item.platform, image: item.image || null };
+        toggleBookmark(bm);
+        const starred = isBookmarked(bmId);
+        el.textContent = starred ? '⭐' : '☆';
+        el.style.color = starred ? '#f0a030' : '#ccc';
+        el.classList.toggle('active', starred);
+      }
     });
   });
 }
@@ -419,6 +532,7 @@ function renderRssTab() {
   const sourceList = state.sources.map(s => ({ key: String(s.id), label: s.name }));
   renderSubTabs(sourceList, state.rssFilter, (key) => {
     state.rssFilter = key;
+    localStorage.setItem('toutiao_rssFilter', key || '');
     loadArticles(100, state.rssFilter).then(() => renderRssList());
   });
 
@@ -440,8 +554,11 @@ function renderRssList() {
 
   list.innerHTML = items.map(a => {
     const img = a.image_url ? `<div class="card-img-wrap"><img src="${escapeHtml(a.image_url)}" alt="" loading="lazy" onerror="this.closest('.card-img-wrap').remove()"></div>` : '';
-    return `<article class="rss-article-card">
+    const bmId = 'rss_' + a.id;
+    const starred = isBookmarked(bmId);
+    return `<article class="rss-article-card" style="position:relative" data-bmid="${bmId}">
       ${img}
+      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" style="position:absolute;top:8px;right:8px;z-index:2;font-size:14px;cursor:pointer;color:${starred ? '#f0a030' : '#ccc'};transition:var(--transition);background:rgba(255,255,255,0.85);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center">${starred ? '⭐' : '☆'}</span>
       <div class="card-header">
         <span class="source-badge">${escapeHtml(a.source_name)}</span>
         <span class="card-time">${formatTime(a.pub_date)}</span>
@@ -450,6 +567,86 @@ function renderRssList() {
       ${a.summary ? `<p class="card-summary">${escapeHtml(a.summary)}</p>` : ''}
     </article>`;
   }).join('');
+
+  list.querySelectorAll('.rss-article-card .bm-star').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const bmId = el.dataset.bmid;
+      const aid = bmId.replace('rss_', '');
+      const a = state.articles.find(x => String(x.id) === aid);
+      if (a) {
+        const bm = { id: bmId, title: a.title, url: a.link || '', source: a.source_name, type: 'rss', platform: '', image: a.image_url || null };
+        toggleBookmark(bm);
+        const starred = isBookmarked(bmId);
+        el.textContent = starred ? '⭐' : '☆';
+        el.style.color = starred ? '#f0a030' : '#ccc';
+        el.classList.toggle('active', starred);
+      }
+    });
+  });
+}
+
+// ── Bookmark tab ──
+
+function renderBookmarkTab() {
+  const area = $('#contentArea');
+  const items = getBookmarks();
+  if (!items.length) {
+    area.innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><p>暂无收藏</p><p style="font-size:12px;margin-top:4px">在文章中点击 ⭐ 收藏</p></div>`;
+    return;
+  }
+  area.innerHTML = `<div class="trending-list">${items.map(item => `
+    <div class="trending-item" data-bmid="${escapeHtml(item.id)}">
+      <div class="trending-info">
+        <div class="trending-title">${escapeHtml(item.title)}</div>
+        <div class="trending-meta">
+          <span class="platform-badge ${item.platform || 'ithome'}">${escapeHtml(item.source)}</span>
+          <span style="cursor:pointer;color:var(--red)" class="unbookmark-btn" data-bmid="${escapeHtml(item.id)}">取消收藏</span>
+        </div>
+      </div>
+    </div>`).join('')}</div>`;
+  area.querySelectorAll('.trending-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.unbookmark-btn')) return;
+      const item = getBookmarks().find(b => b.id === el.dataset.bmid);
+      if (item && item.url) window.open(item.url, '_blank');
+    });
+  });
+  area.querySelectorAll('.unbookmark-btn').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      let list = getBookmarks().filter(b => b.id !== el.dataset.bmid);
+      localStorage.setItem('toutiao_bookmarks', JSON.stringify(list));
+      showToast('已取消收藏');
+      renderBookmarkTab();
+    });
+  });
+}
+
+// ── History tab ──
+
+function renderHistoryTab() {
+  const area = $('#contentArea');
+  const history = state.recommender.history;
+  if (!history.length) {
+    area.innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><p>暂无浏览记录</p></div>`;
+    return;
+  }
+  const items = history.slice().reverse().slice(0, 100);
+  area.innerHTML = `<div class="trending-list">${items.map(h => `
+    <div class="history-item">
+      <span class="hi-type">${h.type === 'rss' ? '资讯' : '热搜'}</span>
+      <span class="hi-title">${escapeHtml(h.title)}</span>
+      <span class="hi-time">${timeAgo(h.timestamp)}</span>
+    </div>`).join('')}</div>
+    <div class="history-clear"><button id="clearHistoryBtn">清空浏览历史</button></div>`;
+  document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+    state.recommender.history = [];
+    localStorage.setItem('toutiao_history', '[]');
+    showToast('已清空');
+    renderHistoryTab();
+  });
 }
 
 // ── Interest tags ──
@@ -588,6 +785,47 @@ $('#topBtn').addEventListener('click', () => window.scrollTo({ top: 0, behavior:
 window.addEventListener('scroll', () => {
   $('#topBtn').classList.toggle('hidden', window.scrollY < 300);
 }, { passive: true });
+
+// Theme toggle
+$('#btnTheme').addEventListener('click', toggleTheme);
+
+// Dislike management (delegated)
+document.addEventListener('click', (e) => {
+  const bar = e.target.closest('#dislikeBar');
+  if (!bar) {
+    // Click outside overlay to close
+    const overlay = e.target.closest('.manage-overlay');
+    if (!overlay && document.querySelector('.manage-overlay')) {
+      document.querySelector('.manage-overlay').remove();
+    }
+    return;
+  }
+  // Show manage overlay
+  const disliked = getDisliked();
+  const existing = document.querySelector('.manage-overlay');
+  if (existing) existing.remove();
+  const ov = document.createElement('div');
+  ov.className = 'manage-overlay';
+  ov.innerHTML = `<div class="manage-box">
+    <h3>已屏蔽的关键词</h3>
+    ${disliked.length ? disliked.map(kw => `<span class="manage-tag">${escapeHtml(kw)}<span class="del" data-kw="${escapeHtml(kw)}">×</span></span>`).join('') : '<p style="font-size:13px;color:var(--text-muted)">暂无屏蔽词</p>'}
+    ${disliked.length ? '<button class="manage-clear" id="manageClearAll">清除全部</button>' : ''}
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelectorAll('.del').forEach(el => {
+    el.addEventListener('click', () => {
+      removeDislike(el.dataset.kw);
+      showToast('已移除');
+      el.closest('.manage-overlay').remove();
+    });
+  });
+  const clearBtn = ov.querySelector('#manageClearAll');
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    clearDisliked();
+    showToast('已清除全部');
+    ov.remove();
+  });
+});
 
 // ── Boot ──
 
