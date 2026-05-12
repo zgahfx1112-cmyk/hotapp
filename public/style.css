@@ -192,7 +192,7 @@ body {
 .feed-card .btn-star.active { color: #f0a030; }
 .feed-card .btn-star:hover { color: #f0a030; transform: scale(1.2); }
 
-.feed-card .btn-hide { position: absolute; bottom: 12px; left: 12px; width: 34px; height: 34px; border: none; background: rgba(255,255,255,0.92); border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; z-index: 2; opacity: 1; transition: var(--transition); line-height: 1; color: #999; padding: 0; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+.feed-card .btn-hide { position: absolute; top: 12px; left: 12px; width: 34px; height: 34px; border: none; background: rgba(255,255,255,0.92); border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; z-index: 2; opacity: 1; transition: var(--transition); line-height: 1; color: #999; padding: 0; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
 .feed-card .btn-hide:hover { color: var(--red); transform: scale(1.2); }
 .feed-card .btn-hide svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
