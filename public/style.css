@@ -102,7 +102,7 @@ body {
 /* ── Sub-tabs ── */
 
 .sub-tabs {
-  display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; scrollbar-width: none;
+  display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;
 }
 .sub-tabs::-webkit-scrollbar { display: none; }
 .sub-tab {
