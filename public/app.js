@@ -502,8 +502,22 @@ function renderHotTab() {
   renderSubTabs(platList, state.hotFilter, (key) => {
     state.hotFilter = key;
     localStorage.setItem('toutiao_hotFilter', key || '');
-    hotResetPagination();
+    // 清空列表 + 重置分页 + 重建 observer
+    const list = $('#trendingList');
+    if (list) list.innerHTML = '';
+    if (state.hotObserver) { state.hotObserver.disconnect(); state.hotObserver = null; }
+    state.hotPage = 0;
+    state.hotLoading = false;
+    state.hotExhausted = false;
     renderHotList();
+    // 重建 IntersectionObserver（renderHotList 已递增 hotPage）
+    state.hotObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !state.hotLoading && !state.hotExhausted) {
+        renderHotList();
+      }
+    }, { rootMargin: '300px' });
+    const sentinel = $('#hotSentinel');
+    if (sentinel) state.hotObserver.observe(sentinel);
   });
 
   // Error banner
@@ -533,9 +547,6 @@ function hotResetPagination() {
 function renderHotList() {
   const list = $('#trendingList');
   if (!list) return;
-
-  // 首次加载（非滚动分页）清空列表
-  if (state.hotPage === 0) list.innerHTML = '';
 
   let items = state.hotItems;
   if (state.hotFilter) items = items.filter(i => i.platform === state.hotFilter);
