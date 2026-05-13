@@ -1023,11 +1023,18 @@ function renderReadingModal(title, content, source, isHtml) {
         <button class="reading-close">&times;</button>
       </div>
       <h2 class="reading-title">${escapeHtml(title || '')}</h2>
-      <div class="reading-body">
-        ${isHtml ? content : (content ? escapeHtml(content).replace(/\n/g, '<br>') : '<p style="color:var(--text-muted)">内容加载失败</p>')}
-      </div>
+      <div class="reading-body"></div>
     </div>`;
   document.body.appendChild(overlay);
+
+  const bodyEl = overlay.querySelector('.reading-body');
+  if (isHtml) {
+    bodyEl.innerHTML = content;
+  } else if (content) {
+    bodyEl.textContent = content;
+  } else {
+    bodyEl.innerHTML = '<p style="color:var(--text-muted)">内容加载失败</p>';
+  }
 
   overlay.querySelector('.reading-close').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', (e) => {
