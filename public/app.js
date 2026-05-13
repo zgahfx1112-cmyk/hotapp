@@ -670,7 +670,6 @@ function renderRssList() {
       </div>
       <h3 class="card-title"><a href="${escapeHtml(a.link || '#')}" target="_blank" rel="noopener">${escapeHtml(a.title)}</a></h3>
       ${summary ? `<p class="card-summary card-summary-clamp" data-expanded="false">${escapeHtml(summary)}</p><button class="summary-toggle">展开全文</button>` : ''}
-      <div class="card-actions"><button class="btn-read" data-url="${escapeHtml(a.link || '#')}">📖 阅读</button></div>
     </article>`;
   }).join('');
 
@@ -705,15 +704,7 @@ function renderRssList() {
     });
   });
 
-  // Reading mode trigger
-  list.querySelectorAll('.btn-read').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      openReadingMode(btn.dataset.url);
-    });
-  });
-}
+  }
 
 // ── Bookmark tab ──
 
@@ -994,52 +985,6 @@ function registerSW() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
-}
-
-// ── Reading Mode ──
-
-async function openReadingMode(url) {
-  if (!url || url === '#') { showToast('暂无原文链接'); return; }
-  showToast('加载中...');
-  try {
-    const res = await fetch(`/api/read?url=${encodeURIComponent(url)}`);
-    const data = await res.json();
-    renderReadingModal(data.title, data.html || data.text, data.source, !!data.html);
-  } catch (e) {
-    showToast('加载失败');
-  }
-}
-
-function renderReadingModal(title, content, source, isHtml) {
-  const existing = document.querySelector('.reading-overlay');
-  if (existing) existing.remove();
-
-  const overlay = document.createElement('div');
-  overlay.className = 'reading-overlay';
-  overlay.innerHTML = `
-    <div class="reading-box">
-      <div class="reading-header">
-        <span class="reading-source">${escapeHtml(source)}</span>
-        <button class="reading-close">&times;</button>
-      </div>
-      <h2 class="reading-title">${escapeHtml(title || '')}</h2>
-      <div class="reading-body"></div>
-    </div>`;
-  document.body.appendChild(overlay);
-
-  const bodyEl = overlay.querySelector('.reading-body');
-  if (isHtml) {
-    bodyEl.innerHTML = content;
-  } else if (content) {
-    bodyEl.textContent = content;
-  } else {
-    bodyEl.innerHTML = '<p style="color:var(--text-muted)">内容加载失败</p>';
-  }
-
-  overlay.querySelector('.reading-close').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
-  });
 }
 
 // ── Pull-to-refresh ──
