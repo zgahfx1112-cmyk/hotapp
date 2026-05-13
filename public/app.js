@@ -534,6 +534,9 @@ function renderHotList() {
   const list = $('#trendingList');
   if (!list) return;
 
+  // 首次加载（非滚动分页）清空列表
+  if (state.hotPage === 0) list.innerHTML = '';
+
   let items = state.hotItems;
   if (state.hotFilter) items = items.filter(i => i.platform === state.hotFilter);
 

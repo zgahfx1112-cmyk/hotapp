@@ -124,16 +124,17 @@ def parse_bilibili_popular(data):
              "heatScore": x.get("stat", {}).get("view") or (6000-i*50),
              "image": x.get("pic") or None} for i,x in enumerate(items[:100])]  # 增加到100条
 
-def parse_36kr(data):
+def parse_36kr_hot(data):
+    """36氪快讯（独立平台，与 RSS 36氪区分）"""
     if isinstance(data, str):
         try:
             data = json.loads(data)
         except:
             return []
     items = (data.get("data", {}) or {}).get("items") or []
-    return [{"id": f"36kr_{i}", "title": x.get("title", ""),
+    return [{"id": f"36kr_hot_{i}", "title": x.get("title", ""),
              "url": f"https://36kr.com/newsflashes/{x.get('id','')}",
-             "platform": "36kr", "rank": i+1,
+             "platform": "36kr_hot", "rank": i+1,
              "heatScore": 6000-i*50} for i,x in enumerate(items[:30])]
 
 def parse_sspai(data):
@@ -218,18 +219,65 @@ def parse_zhihu(data):
         })
     return result
 
-def parse_hupu(raw):
+def parse_zhihu_billboard(html):
+    """从知乎热榜 HTML 提取数据（无需 API cookie）"""
     result = []
-    pattern = re.compile(r'<div class="t-title">.*?<a[^>]*href="([^"]*)"[^>]*>([^<]+)</a>', re.DOTALL)
-    matches = pattern.findall(raw)
-    for i, (href, title) in enumerate(matches[:50]):
+    m = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.*?});', html, re.DOTALL)
+    if not m:
+        return result
+    try:
+        data = json.loads(m.group(1))
+        hot_items = (data.get("topstory", {}) or {}).get("hotList", []) or []
+        for i, x in enumerate(hot_items[:50]):
+            target = (x.get("target", {}) or {})
+            title = target.get("titleArea", {}).get("text", "") or target.get("title", "")
+            if not title:
+                continue
+            url = target.get("link", {}).get("url", "")
+            if url and not url.startswith("http"):
+                url = f"https://www.zhihu.com{url}"
+            heat = target.get("metricsArea", {}).get("text", "") or ""
+            heat_val = 5000
+            if heat:
+                hm = re.search(r"(\d+(?:\.\d+)?)\s*万", heat)
+                if hm:
+                    heat_val = int(float(hm.group(1)) * 10000)
+                else:
+                    hm2 = re.search(r"(\d+)", heat)
+                    if hm2:
+                        heat_val = int(hm2.group(1))
+            result.append({
+                "id": f"zhihu_{i}", "title": title,
+                "url": url or f"https://www.zhihu.com/hot",
+                "platform": "zhihu", "rank": i+1,
+                "heatScore": heat_val, "image": None
+            })
+    except:
+        pass
+    return result
+
+def parse_hupu(raw):
+    """从虎扑 HTML 提取热搜（原始编码 GB18030）"""
+    result = []
+    if isinstance(raw, bytes):
+        try:
+            text = raw.decode("gb18030")
+        except:
+            text = raw.decode("gbk", errors="replace")
+    else:
+        text = raw
+    # 热搜列表
+    pattern = re.compile(r'hot-search-item.*?hot-index[^>]*>([^<]+)<.*?hot-title[^>]*>([^<]+)<', re.DOTALL)
+    matches = pattern.findall(text)
+    for i, (idx_str, title) in enumerate(matches[:50]):
         title = title.strip()
         if not title:
             continue
-        url = href if href.startswith("http") else f"https://bbs.hupu.com{href}"
+        kw = urllib.parse.quote(title)
         result.append({
             "id": f"hupu_{i}", "title": title,
-            "url": url, "platform": "hupu",
+            "url": f"https://bbs.hupu.com/search?q={kw}",
+            "platform": "hupu",
             "rank": i+1, "heatScore": int(5000 - i * 80),
             "image": None
         })
@@ -281,18 +329,20 @@ PLATFORMS = {
         "hdrs": {"User-Agent": UA, "Referer": "https://www.ithome.com/"},
         "parse": parse_ithome},
     "zhihu": {"name": "知乎热榜",
-        "url": "https://www.zhihu.com/api/v3/feed/topstory/hot-lists",
+        "url": "https://www.zhihu.com/billboard",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.zhihu.com/"},
-        "parse": parse_zhihu},
+        "parse": parse_zhihu_billboard},
     "hupu": {"name": "虎扑",
         "url": "https://bbs.hupu.com/all",
         "hdrs": {"User-Agent": UA, "Referer": "https://bbs.hupu.com/"},
+        "raw_response": True,
         "parse": parse_hupu},
     "36kr_hot": {"name": "36氪热榜",
-        "url": "https://api.36kr.com/app/api/newsflash?page=1&size=30",
+        "url": "https://36kr.com/pp/api/newsflash?page=1&size=30",
         "hdrs": {"User-Agent": UA, "Referer": "https://36kr.com/"},
-        "parse": parse_36kr},
-}
+        "parse": parse_36kr_hot},
+}  # end PLATFORMS
+# 知乎热榜 API 需登录验证，暂用 RSS 替代
 
 def fetch_one(key, cfg):
     try:
@@ -302,25 +352,27 @@ def fetch_one(key, cfg):
         if resp.headers.get("Content-Encoding") == "gzip":
             try: body = gzip.decompress(body)
             except: pass
-        text = body.decode("utf-8", errors="replace")
 
-        # 尝试解析 JSON，如果失败则返回原始文本（供 HTML 解析器使用）
-        try:
-            data = json.loads(text)
-        except:
-            # 检测是否是验证码或反爬 HTML 页面（没有我们需要的数据）
-            if len(text) < 500 or ("captcha" in text.lower() and "<form" in text.lower()):
-                print(f"  [{cfg['name']}] 返回验证页面")
-                return []
-            data = text  # 返回原始 HTML，由 parse 函数处理
+        if cfg.get("raw_response"):
+            # 原始二进制响应，直接传给解析器（用于 gb18030 编码页面）
+            items = cfg["parse"](body)
+        else:
+            enc = cfg.get("encoding", "utf-8")
+            text = body.decode(enc, errors="replace")
 
-        items = cfg["parse"](data)
+            try:
+                data = json.loads(text)
+            except:
+                if len(text) < 500 or ("captcha" in text.lower() and "<form" in text.lower()):
+                    print(f"  [{cfg['name']}] 返回验证页面")
+                    return []
+                data = text
+
+            items = cfg["parse"](data)
+
         now = int(time.time() * 1000)
         for item in items:
-            if item.get("event_time"):
-                item["timestamp"] = item.pop("event_time") * 1000
-            else:
-                item["timestamp"] = now
+            item["timestamp"] = now
         return items
     except Exception as e:
         print(f"  [{cfg['name']}] 失败: {e}")
