@@ -5,6 +5,8 @@ const http = require('http');
 const { spawn } = require('child_process');
 const { initDb, save, getArticles, getSources, getStats } = require('./db');
 const { fetchAll } = require('./fetch');
+const { Readability } = require('@mozilla/readability');
+const { JSDOM } = require('jsdom');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'toutiao.db');
 const PORT = process.env.PORT || 3000;
@@ -65,30 +67,31 @@ app.get('/api/read', async (req, res) => {
     clearTimeout(timeout);
     const html = await fetchRes.text();
 
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : '';
+    const doc = new JSDOM(html, { url });
+    const reader = new Readability(doc.window.document);
+    const article = reader.parse();
 
-    let text = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
-      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#\d+;/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (text.length > 5000) text = text.substring(0, 5000) + '...';
-
-    res.json({ title, text, source: url });
+    if (article) {
+      res.json({ title: article.title || '', text: article.textContent.trim(), html: article.content, source: url });
+    } else {
+      // Fallback: basic title + text strip
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      const title = titleMatch ? titleMatch[1].trim() : '';
+      let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+        .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+        .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"').replace(/&#\d+;/g, '')
+        .replace(/\s+/g, ' ').trim();
+      if (text.length > 5000) text = text.substring(0, 5000) + '...';
+      res.json({ title, text, html: '', source: url });
+    }
   } catch (err) {
-    res.json({ title: '', text: '', source: url, error: err.message });
+    res.json({ title: '', text: '', html: '', source: url, error: err.message });
   }
 });
 

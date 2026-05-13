@@ -1004,13 +1004,13 @@ async function openReadingMode(url) {
   try {
     const res = await fetch(`/api/read?url=${encodeURIComponent(url)}`);
     const data = await res.json();
-    renderReadingModal(data.title, data.text, data.source);
+    renderReadingModal(data.title, data.html || data.text, data.source, !!data.html);
   } catch (e) {
     showToast('加载失败');
   }
 }
 
-function renderReadingModal(title, text, source) {
+function renderReadingModal(title, content, source, isHtml) {
   const existing = document.querySelector('.reading-overlay');
   if (existing) existing.remove();
 
@@ -1024,7 +1024,7 @@ function renderReadingModal(title, text, source) {
       </div>
       <h2 class="reading-title">${escapeHtml(title || '')}</h2>
       <div class="reading-body">
-        ${text ? escapeHtml(text).replace(/\n/g, '<br>') : '<p style="color:var(--text-muted)">内容加载失败</p>'}
+        ${isHtml ? content : (content ? escapeHtml(content).replace(/\n/g, '<br>') : '<p style="color:var(--text-muted)">内容加载失败</p>')}
       </div>
     </div>`;
   document.body.appendChild(overlay);
