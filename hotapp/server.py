@@ -337,10 +337,6 @@ PLATFORMS = {
         "hdrs": {"User-Agent": UA, "Referer": "https://bbs.hupu.com/"},
         "raw_response": True,
         "parse": parse_hupu},
-    "36kr_hot": {"name": "36氪热榜",
-        "url": "https://36kr.com/pp/api/newsflash?page=1&size=30",
-        "hdrs": {"User-Agent": UA, "Referer": "https://36kr.com/"},
-        "parse": parse_36kr_hot},
 }  # end PLATFORMS
 # 知乎热榜 API 需登录验证，暂用 RSS 替代
 
