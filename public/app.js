@@ -26,23 +26,45 @@ const state = {
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
+const FIRST_SCREEN_ARTICLE_LIMIT = 30;
 
 // ── Init ──
 
 async function init() {
-  // Restore filters
-  try { state.rssFilter = localStorage.getItem('toutiao_rssFilter') || null; } catch {}
-  try { state.hotFilter = localStorage.getItem('toutiao_hotFilter') || null; } catch {}
-
-  // Restore theme
-  initTheme();
-
-  await Promise.all([loadSources(), loadArticles(200), loadHotData(), loadStats()]);
-  getUserStats();
-  renderTab();
-  renderInterestTags();
-  setupTabs();
-  registerSW();
+  createInitController({
+    restorePrefs() {
+      try { state.rssFilter = localStorage.getItem('toutiao_rssFilter') || null; } catch {}
+      try { state.hotFilter = localStorage.getItem('toutiao_hotFilter') || null; } catch {}
+    },
+    initTheme,
+    renderTab,
+    renderInterestTags,
+    setupTabs,
+    registerSW,
+    getUserStats,
+    loadSources,
+    loadArticles: (limit) => loadArticles(limit),
+    loadHotData,
+    loadStats,
+    afterSourcesLoaded() {
+      if (state.currentTab === 'rss') renderTab();
+    },
+    afterArticlesLoaded() {
+      state.feedItems = [];
+      state.feedPage = 0;
+      state.feedExhausted = false;
+      if (state.currentTab === 'recommend' || state.currentTab === 'rss') renderTab();
+    },
+    afterHotLoaded() {
+      state.feedItems = [];
+      state.feedPage = 0;
+      state.feedExhausted = false;
+      if (state.currentTab === 'recommend' || state.currentTab === 'hot') renderTab();
+    },
+    afterStatsLoaded() {
+      if (state.currentTab === 'recommend') renderTab();
+    }
+  }).init();
 }
 
 // ── API ──
@@ -96,7 +118,7 @@ async function doRefresh() {
       fetch('/api/fetch', { method: 'POST' }),
       loadHotData()
     ]);
-    await loadArticles(200);
+    await loadArticles(FIRST_SCREEN_ARTICLE_LIMIT);
     await loadStats();
     state.feedItems = [];
     state.feedPage = 0;
@@ -1076,4 +1098,10 @@ document.addEventListener('click', (e) => {
 
 // ── Boot ──
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof createInitController === 'undefined') {
+    console.error('Init controller missing');
+    return;
+  }
+  init();
+});
