@@ -328,7 +328,7 @@ function buildHybridFeed() {
 
 function renderDailyDigest() {
   // Always show: top 5 from hot items
-  const top5 = state.hotItems.slice(0, 5);
+  const top5 = selectRecommendDigestItems(state.hotItems);
   if (!top5.length) return '';
 
   const items = top5.map((h, i) => {
