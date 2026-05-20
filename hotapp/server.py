@@ -10,7 +10,6 @@ import time
 import os
 import threading
 import signal
-import iconv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 
@@ -263,8 +262,6 @@ def parse_hupu(raw):
     result = []
     if isinstance(raw, bytes):
         text = raw.decode("utf-8", errors="replace")
-        if "�" in text:
-            text = iconv.decode(raw, "gb18030")
     else:
         text = raw
     # 热搜列表
