@@ -246,6 +246,77 @@ function toggleTheme() {
 
 // ── Hybrid scoring ──
 
+function getReadPenalty(item, history) {
+  return history.some(h => h.url && item.url && h.url === item.url)
+    || history.some(h => h.title === item.title)
+    ? 45
+    : 0;
+}
+
+function scoreCandidate(item, context) {
+  const now = context.now;
+  const ageHours = (now - item.timestamp) / 3600000;
+  let score = 0;
+
+  if (item.type === 'hot') {
+    score += ((item.heatScore || 0) / (context.maxHeat || 1)) * 18;
+  }
+
+  if (ageHours <= 24) score += 18;
+  else if (ageHours <= 72) score += Math.max(4, 18 - (ageHours - 24) * 0.25);
+
+  for (const tag of context.interests) {
+    const kws = TOPIC_KEYWORDS[tag] || [];
+    if (kws.some(kw => item.title.includes(kw))) {
+      score += 28;
+      break;
+    }
+  }
+
+  for (const [kw, weight] of Object.entries(context.behaviorWeights)) {
+    if (item.title.includes(kw)) {
+      score += Math.min(weight * 3, 12);
+      break;
+    }
+  }
+
+  if ((context.disliked || []).some(kw => item.title.includes(kw))) score -= 50;
+  score -= getReadPenalty(item, context.history || []);
+
+  return { ...item, score };
+}
+
+function rerankCandidates(items) {
+  const sourceQuota = new Map();
+  const remaining = items.slice();
+  const ranked = [];
+
+  while (remaining.length) {
+    let pickIndex = -1;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const item = remaining[i];
+      const count = sourceQuota.get(item.source) || 0;
+      const prev = ranked[ranked.length - 1];
+      const violatesQuota = ranked.length < 10 && count >= 3;
+      const violatesAdjacent = prev && prev.source === item.source;
+
+      if (!violatesQuota && !violatesAdjacent) {
+        pickIndex = i;
+        break;
+      }
+    }
+
+    if (pickIndex === -1) pickIndex = 0;
+
+    const [picked] = remaining.splice(pickIndex, 1);
+    ranked.push(picked);
+    sourceQuota.set(picked.source, (sourceQuota.get(picked.source) || 0) + 1);
+  }
+
+  return ranked;
+}
+
 function buildHybridFeed() {
   const unified = [];
   const now = Date.now();
@@ -285,37 +356,25 @@ function buildHybridFeed() {
   const bw = state.recommender.getBehaviorWeights();
 
   const scored = unified.map(item => {
-    let score = 0;
-    const ageHours = (now - item.timestamp) / 3600000;
+    const scoredItem = scoreCandidate(item, {
+      now,
+      interests: state.recommender.interests,
+      behaviorWeights: bw,
+      disliked: getDisliked(),
+      history: state.recommender.history,
+      maxHeat
+    });
     const ageMin = (now - item.timestamp) / 60000;
+    let score = scoredItem.score;
 
-    // Heat/timeliness
-    if (item.type === 'hot') {
-      score += (item.heatScore / maxHeat) * 40;
-    } else {
-      score += Math.max(0, 40 - ageHours * 1.5);
+    if (item.type === 'rss') {
+      score += Math.max(0, 40 - ((now - item.timestamp) / 3600000) * 1.5);
     }
 
-    // Interest tags
-    for (const tag of state.recommender.interests) {
-      const kws = TOPIC_KEYWORDS[tag] || [];
-      if (kws.some(kw => item.title.includes(kw))) { score += 30; break; }
-    }
-
-    // Behavior history
-    for (const [kw, w] of Object.entries(bw)) {
-      if (item.title.includes(kw)) { score += Math.min(w * 5, 20); break; }
-    }
-
-    // Freshness
     score += Math.max(0, 10 - ageMin * 0.5);
 
     // Random jitter: ±15 — fresh order every refresh
     score += (Math.random() - 0.5) * 30;
-
-    // Dislike penalty
-    const disliked = getDisliked();
-    if (disliked.some(kw => item.title.includes(kw))) score -= 50;
 
     // Reason
     let reason = '热门推荐';
@@ -324,7 +383,7 @@ function buildHybridFeed() {
       if (kws.some(kw => item.title.includes(kw))) { reason = `你关注「${tag}」`; break; }
     }
 
-    return { ...item, score, reason };
+    return { ...scoredItem, score, reason };
   });
 
   scored.sort((a, b) => b.score - a.score);
@@ -343,7 +402,7 @@ function buildHybridFeed() {
   }
   scored.sort((a, b) => b.score - a.score);
 
-  return scored;
+  return rerankCandidates(scored);
 }
 
 // ── Daily Digest ──
@@ -1014,94 +1073,98 @@ function registerSW() {
 let ptrState = { startY: 0, pulling: false, moved: false };
 const PTR_THRESHOLD = 80;
 
-document.addEventListener('touchstart', (e) => {
-  if (window.scrollY > 10) return;
-  ptrState.startY = e.touches[0].clientY;
-  ptrState.pulling = true;
-  ptrState.moved = false;
-}, { passive: true });
+function setupBrowserEvents() {
+  document.addEventListener('touchstart', (e) => {
+    if (window.scrollY > 10) return;
+    ptrState.startY = e.touches[0].clientY;
+    ptrState.pulling = true;
+    ptrState.moved = false;
+  }, { passive: true });
 
-document.addEventListener('touchmove', (e) => {
-  if (!ptrState.pulling) return;
-  const dy = e.touches[0].clientY - ptrState.startY;
-  if (dy > 10) ptrState.moved = true;
-  if (ptrState.moved && dy > 0) {
-    const pull = Math.min(dy * 0.4, 60);
-    document.body.style.transform = `translateY(${pull}px)`;
-    document.body.style.transition = 'none';
-  }
-}, { passive: true });
-
-document.addEventListener('touchend', (e) => {
-  if (!ptrState.pulling) return;
-  ptrState.pulling = false;
-  document.body.style.transition = 'transform 0.3s ease';
-  document.body.style.transform = '';
-  if (ptrState.moved && (e.changedTouches[0].clientY - ptrState.startY) > PTR_THRESHOLD) {
-    // Trigger refresh
-    const btn = $('#btnRefresh');
-    if (btn && !btn.classList.contains('spinning')) {
-      showToast('↻ 刷新中...');
-      doRefresh();
+  document.addEventListener('touchmove', (e) => {
+    if (!ptrState.pulling) return;
+    const dy = e.touches[0].clientY - ptrState.startY;
+    if (dy > 10) ptrState.moved = true;
+    if (ptrState.moved && dy > 0) {
+      const pull = Math.min(dy * 0.4, 60);
+      document.body.style.transform = `translateY(${pull}px)`;
+      document.body.style.transition = 'none';
     }
-  }
-}, { passive: true });
+  }, { passive: true });
 
-// ── Events ──
-
-$('#btnRefresh').addEventListener('click', doRefresh);
-$('#topBtn').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-window.addEventListener('scroll', () => {
-  $('#topBtn').classList.toggle('hidden', window.scrollY < 300);
-}, { passive: true });
-
-// Theme toggle
-$('#btnTheme').addEventListener('click', toggleTheme);
-
-// Dislike management (delegated)
-document.addEventListener('click', (e) => {
-  const bar = e.target.closest('#dislikeBar');
-  if (!bar) {
-    // Click outside overlay to close
-    const overlay = e.target.closest('.manage-overlay');
-    if (!overlay && document.querySelector('.manage-overlay')) {
-      document.querySelector('.manage-overlay').remove();
+  document.addEventListener('touchend', (e) => {
+    if (!ptrState.pulling) return;
+    ptrState.pulling = false;
+    document.body.style.transition = 'transform 0.3s ease';
+    document.body.style.transform = '';
+    if (ptrState.moved && (e.changedTouches[0].clientY - ptrState.startY) > PTR_THRESHOLD) {
+      const btn = $('#btnRefresh');
+      if (btn && !btn.classList.contains('spinning')) {
+        showToast('↻ 刷新中...');
+        doRefresh();
+      }
     }
-    return;
-  }
-  // Show manage overlay
-  const disliked = getDisliked();
-  const existing = document.querySelector('.manage-overlay');
-  if (existing) existing.remove();
-  const ov = document.createElement('div');
-  ov.className = 'manage-overlay';
-  ov.innerHTML = `<div class="manage-box">
-    <h3>已屏蔽的关键词</h3>
-    ${disliked.length ? disliked.map(kw => `<span class="manage-tag">${escapeHtml(kw)}<span class="del" data-kw="${escapeHtml(kw)}">×</span></span>`).join('') : '<p style="font-size:13px;color:var(--text-muted)">暂无屏蔽词</p>'}
-    ${disliked.length ? '<button class="manage-clear" id="manageClearAll">清除全部</button>' : ''}
-  </div>`;
-  document.body.appendChild(ov);
-  ov.querySelectorAll('.del').forEach(el => {
-    el.addEventListener('click', () => {
-      removeDislike(el.dataset.kw);
-      showToast('已移除');
-      el.closest('.manage-overlay').remove();
+  }, { passive: true });
+
+  $('#btnRefresh').addEventListener('click', doRefresh);
+  $('#topBtn').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  window.addEventListener('scroll', () => {
+    $('#topBtn').classList.toggle('hidden', window.scrollY < 300);
+  }, { passive: true });
+
+  $('#btnTheme').addEventListener('click', toggleTheme);
+
+  document.addEventListener('click', (e) => {
+    const bar = e.target.closest('#dislikeBar');
+    if (!bar) {
+      const overlay = e.target.closest('.manage-overlay');
+      if (!overlay && document.querySelector('.manage-overlay')) {
+        document.querySelector('.manage-overlay').remove();
+      }
+      return;
+    }
+    const disliked = getDisliked();
+    const existing = document.querySelector('.manage-overlay');
+    if (existing) existing.remove();
+    const ov = document.createElement('div');
+    ov.className = 'manage-overlay';
+    ov.innerHTML = `<div class="manage-box">
+      <h3>已屏蔽的关键词</h3>
+      ${disliked.length ? disliked.map(kw => `<span class="manage-tag">${escapeHtml(kw)}<span class="del" data-kw="${escapeHtml(kw)}">×</span></span>`).join('') : '<p style="font-size:13px;color:var(--text-muted)">暂无屏蔽词</p>'}
+      ${disliked.length ? '<button class="manage-clear" id="manageClearAll">清除全部</button>' : ''}
+    </div>`;
+    document.body.appendChild(ov);
+    ov.querySelectorAll('.del').forEach(el => {
+      el.addEventListener('click', () => {
+        removeDislike(el.dataset.kw);
+        showToast('已移除');
+        el.closest('.manage-overlay').remove();
+      });
+    });
+    const clearBtn = ov.querySelector('#manageClearAll');
+    if (clearBtn) clearBtn.addEventListener('click', () => {
+      clearDisliked();
+      showToast('已清除全部');
+      ov.remove();
     });
   });
-  const clearBtn = ov.querySelector('#manageClearAll');
-  if (clearBtn) clearBtn.addEventListener('click', () => {
-    clearDisliked();
-    showToast('已清除全部');
-    ov.remove();
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof createInitController === 'undefined') {
+      console.error('Init controller missing');
+      return;
+    }
+    init();
   });
-});
+}
 
-// ── Boot ──
+if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+  setupBrowserEvents();
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-  if (typeof createInitController === 'undefined') {
-    console.error('Init controller missing');
-    return;
-  }
-  init();
-});
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    rerankCandidates,
+    scoreCandidate
+  };
+}
