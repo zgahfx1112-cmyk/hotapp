@@ -9,6 +9,8 @@ import re
 import time
 import os
 import threading
+import signal
+import iconv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 
@@ -257,13 +259,12 @@ def parse_zhihu_billboard(html):
     return result
 
 def parse_hupu(raw):
-    """从虎扑 HTML 提取热搜（原始编码 GB18030）"""
+    """从虎扑 HTML 提取热搜"""
     result = []
     if isinstance(raw, bytes):
-        try:
-            text = raw.decode("gb18030")
-        except:
-            text = raw.decode("gbk", errors="replace")
+        text = raw.decode("utf-8", errors="replace")
+        if "�" in text:
+            text = iconv.decode(raw, "gb18030")
     else:
         text = raw
     # 热搜列表

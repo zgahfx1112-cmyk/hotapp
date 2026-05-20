@@ -1,4 +1,5 @@
 const Parser = require('rss-parser');
+const { filterDisabledSources } = require('./sources-config');
 
 function extractImage(item) {
   // enclosure
@@ -27,6 +28,8 @@ function extractImage(item) {
     while (stmt.step()) rows.push(stmt.getAsObject());
     stmt.free();
   }
+
+  rows = filterDisabledSources(rows);
 
   if (!rows.length) return [];
 

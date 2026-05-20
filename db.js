@@ -1,6 +1,7 @@
 const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
+const { loadSourcesConfig, filterDisabledSources } = require('./sources-config');
 
 let db = null;
 
@@ -49,9 +50,7 @@ async function initDb(dbPath) {
   db.run('CREATE INDEX IF NOT EXISTS idx_articles_date ON articles(pub_date DESC)');
 
   // Seed sources
-  const sources = JSON.parse(fs.readFileSync(
-    path.join(__dirname, 'sources.json'), 'utf-8'
-  ));
+  const sources = loadSourcesConfig();
   for (const s of sources) {
     const r = db.run(
       'INSERT OR IGNORE INTO sources (name, feed_url) VALUES (?, ?)',
@@ -106,7 +105,7 @@ function getSources() {
   const sources = [];
   while (stmt.step()) sources.push(stmt.getAsObject());
   stmt.free();
-  return sources;
+  return filterDisabledSources(sources);
 }
 
 function getStats() {
