@@ -21,8 +21,11 @@ test('rerankCandidates limits same-source items in top 10 and avoids adjacent du
   const result = rerankCandidates(items);
   const top10 = result.slice(0, 10);
   const weiboCount = top10.filter(item => item.source === '微博').length;
-
-  assert.ok(weiboCount <= 3);
+  // 微博 is a priority source, allowed up to 5 in top 10
+  assert.ok(weiboCount <= 5);
+  // 非优先 sources capped at 3
+  const baiduCount = top10.filter(item => item.source === '百度').length;
+  assert.ok(baiduCount <= 3);
 
   for (let i = 1; i < top10.length; i++) {
     assert.notEqual(top10[i].source, top10[i - 1].source);
@@ -86,6 +89,56 @@ test('scoreCandidate heavily penalizes disliked and previously read items', () =
     topicKeys: ['科技']
   };
 
-  const result = scoreCandidate(item, context);
+  test('scoreCandidate boosts 头条 and 微博 above other sources', () => {
+  const now = new Date('2026-05-20T12:00:00Z').getTime();
+  const context = {
+    now,
+    interests: [],
+    behaviorWeights: {},
+    disliked: [],
+    history: [],
+    maxHeat: 100
+  };
+
+  const toutiaoItem = {
+    id: 'h1', title: '新闻-A', source: '头条', type: 'hot',
+    heatScore: 80, timestamp: now - 3600000, topicKeys: ['社会']
+  };
+  const weiboItem = {
+    id: 'h2', title: '新闻-B', source: '微博', type: 'hot',
+    heatScore: 80, timestamp: now - 3600000, topicKeys: ['娱乐']
+  };
+  const baiduItem = {
+    id: 'h3', title: '新闻-C', source: '百度', type: 'hot',
+    heatScore: 80, timestamp: now - 3600000, topicKeys: ['科技']
+  };
+
+  const tScore = scoreCandidate(toutiaoItem, context).score;
+  const wScore = scoreCandidate(weiboItem, context).score;
+  const bScore = scoreCandidate(baiduItem, context).score;
+
+  assert.ok(tScore > bScore);
+  assert.ok(wScore > bScore);
+  assert.ok(tScore - bScore >= 6);
+  assert.ok(wScore - bScore >= 6);
+});
+
+test('rerankCandidates allows up to 5 头条/微博 items in top 10', () => {
+  const items = [];
+  for (let i = 0; i < 6; i++) items.push({ id: `t${i}`, source: '头条', title: `头条-${i}`, type: 'hot', score: 100 - i, topicKeys: ['社会'] });
+  for (let i = 0; i < 6; i++) items.push({ id: `w${i}`, source: '微博', title: `微博-${i}`, type: 'hot', score: 94 - i, topicKeys: ['娱乐'] });
+  items.push({ id: 'b1', source: '百度', title: '百度-A', type: 'hot', score: 88, topicKeys: ['科技'] });
+  items.push({ id: 'z1', source: '知乎', title: '知乎-A', type: 'hot', score: 87, topicKeys: ['教育'] });
+
+  const result = rerankCandidates(items);
+  const top10 = result.slice(0, 10);
+  const toutiaoCount = top10.filter(i => i.source === '头条').length;
+  const weiboCount = top10.filter(i => i.source === '微博').length;
+
+  assert.ok(toutiaoCount <= 5);
+  assert.ok(weiboCount <= 5);
+});
+
+const result = scoreCandidate(item, context);
   assert.ok(result.score < 0);
 });

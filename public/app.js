@@ -258,6 +258,9 @@ function scoreCandidate(item, context) {
   const ageHours = (now - item.timestamp) / 3600000;
   let score = 0;
 
+  const SOURCE_BOOST = { '头条': 8, '微博': 8 };
+  score += SOURCE_BOOST[item.source] || 0;
+
   if (item.type === 'hot') {
     score += ((item.heatScore || 0) / (context.maxHeat || 1)) * 18;
   }
@@ -287,6 +290,7 @@ function scoreCandidate(item, context) {
 }
 
 function rerankCandidates(items) {
+  const PRIORITY_SOURCES = new Set(['头条', '微博']);
   const sourceQuota = new Map();
   const remaining = items.slice();
   const ranked = [];
@@ -298,7 +302,9 @@ function rerankCandidates(items) {
       const item = remaining[i];
       const count = sourceQuota.get(item.source) || 0;
       const prev = ranked[ranked.length - 1];
-      const violatesQuota = ranked.length < 10 && count >= 3;
+      const isPriority = PRIORITY_SOURCES.has(item.source);
+      const maxPerSource = isPriority ? 5 : 3;
+      const violatesQuota = ranked.length < 10 && count >= maxPerSource;
       const violatesAdjacent = prev && prev.source === item.source;
 
       if (!violatesQuota && !violatesAdjacent) {
