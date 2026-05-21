@@ -333,12 +333,16 @@ function buildHybridFeed() {
   const unified = [];
   const now = Date.now();
 
-  // RSS → unified (shuffle pool for variety on each refresh)
-  const shuffledArticles = state.articles.slice().sort(() => Math.random() - 0.5);
-  const rssSample = shuffledArticles.slice(0, Math.min(25, shuffledArticles.length));
-  for (const a of rssSample) {
+  // Session dedup: track items shown this session
+  const shownIds = JSON.parse(sessionStorage.getItem('toutiao_shown') || '[]');
+
+  // RSS → unified (all articles participate in scoring)
+  for (const a of state.articles) {
+    const id = 'rss_' + a.id;
+    // Skip items already shown this session
+    if (shownIds.includes(id)) continue;
     unified.push({
-      id: 'rss_' + a.id,
+      id,
       title: a.title,
       url: a.link || '',
       image: a.image_url || null,
@@ -351,6 +355,8 @@ function buildHybridFeed() {
 
   // Hot → unified
   for (const h of state.hotItems) {
+    // Skip items already shown this session
+    if (shownIds.includes(h.id)) continue;
     unified.push({
       id: h.id,
       title: h.title,
@@ -364,7 +370,19 @@ function buildHybridFeed() {
     });
   }
 
-  if (!unified.length) return [];
+  if (!unified.length) {
+    // Pool exhausted — reset shown list, allow repeats but mark as replay
+    sessionStorage.removeItem('toutiao_shown');
+    const replay = [];
+    for (const a of state.articles) {
+      replay.push({ id: 'rss_' + a.id, title: a.title, url: a.link || '', image: a.image_url || null, source: a.source_name, type: 'rss', heatScore: 0, timestamp: a.pub_date ? new Date(a.pub_date).getTime() : now, _replay: true });
+    }
+    for (const h of state.hotItems) {
+      replay.push({ id: h.id, title: h.title, url: h.url || '', image: h.image || null, source: getPlatformName(h.platform), platform: h.platform, type: 'hot', heatScore: h.heatScore || 0, timestamp: h.timestamp || now, _replay: true });
+    }
+    if (!replay.length) return [];
+    return replay;
+  }
 
   const maxHeat = Math.max(...unified.map(i => i.heatScore || 0), 1);
   const bw = state.recommender.getBehaviorWeights();
@@ -416,7 +434,13 @@ function buildHybridFeed() {
   }
   scored.sort((a, b) => b.score - a.score);
 
-  return rerankCandidates(scored);
+  const ranked = rerankCandidates(scored);
+  // Record shown items to sessionStorage for session dedup
+  const topIds = ranked.slice(0, 30).map(i => i.id);
+  shownIds.push(...topIds);
+  sessionStorage.setItem('toutiao_shown', JSON.stringify(shownIds));
+
+  return ranked;
 }
 
 // ── Daily Digest ──
