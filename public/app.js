@@ -114,16 +114,22 @@ async function doRefresh() {
   const btn = $('#btnRefresh');
   btn.classList.add('spinning');
   try {
-    await Promise.all([
-      fetch('/api/fetch', { method: 'POST' }),
-      loadHotData()
-    ]);
-    await loadArticles(FIRST_SCREEN_ARTICLE_LIMIT);
-    await loadStats();
+    // Load cached data first — instant render
+    await Promise.all([loadHotData(), loadArticles(FIRST_SCREEN_ARTICLE_LIMIT), loadStats()]);
     state.feedItems = [];
     state.feedPage = 0;
     state.feedExhausted = false;
     renderTab();
+    // Background fetch — update cache, re-render when done
+    fetch('/api/fetch', { method: 'POST' }).then(() => {
+      return Promise.all([loadHotData(), loadArticles(FIRST_SCREEN_ARTICLE_LIMIT), loadStats()]);
+    }).then(() => {
+      state.feedItems = [];
+      state.feedPage = 0;
+      state.feedExhausted = false;
+      renderTab();
+      showToast('数据已更新');
+    }).catch(() => {});
   } catch (e) {
     state.error = '刷新失败';
     renderTab();
