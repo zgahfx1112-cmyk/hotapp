@@ -548,9 +548,11 @@ function loadFeedPage() {
     ];
     batch.forEach((item, i) => {
       const g = gradients[(start + i) % gradients.length];
+      const SOURCE_ICONS = { '头条':'📰','微博':'🔥','百度':'🔍','知乎':'💡','虎扑':'🏀','IT之家':'💻','36氪':'💰','虎嗅':'📊','少数派':'⚡','GitHub':'🐙','V2EX':'💬' };
+      const icon = SOURCE_ICONS[item.source] || (item.type === 'hot' ? '🔥' : '📝');
       const imgHtml = item.image
-        ? `<div class="feed-img-wrap"><img src="${escapeHtml(item.image)}" alt="" loading="lazy" onerror="this.style.opacity='0';this.parentElement.style.background='${g}'"><div class="fallback" style="background:${g};display:none"></div></div>`
-        : `<div class="feed-img-wrap"><div class="fallback" style="background:${g};display:block"></div></div>`;
+        ? `<div class="feed-img-wrap"><img src="${escapeHtml(item.image)}" alt="" loading="lazy" onerror="this.style.opacity='0';this.parentElement.querySelector('.fallback').style.display='flex'"><div class="fallback" style="background:${g};display:none">${icon}</div></div>`
+        : `<div class="feed-img-wrap"><div class="fallback" style="background:${g};display:flex">${icon}</div></div>`;
       const card = document.createElement('div');
       card.className = 'feed-card';
       const starCls = isBookmarked(item.id) ? 'btn-star active' : 'btn-star';

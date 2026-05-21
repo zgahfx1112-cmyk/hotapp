@@ -186,13 +186,14 @@ body {
 
 /* ── Feed grid (recommend tab) ── */
 
-.feed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.feed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 600px) { .feed-grid { grid-template-columns: 1fr; } }
 
 .feed-card { position: relative; padding: 16px; background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius); cursor: pointer; transition: var(--transition);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
-.feed-card:hover { border-color: var(--accent); background: var(--bg-hover); }
+.feed-card:hover { border-color: var(--accent); background: var(--bg-hover); box-shadow: 0 4px 16px rgba(0,0,0,0.14); transform: translateY(-2px); }
 .feed-card .btn-star { position: absolute; bottom: 12px; right: 12px; width: 34px; height: 34px; border: none; background: rgba(255,255,255,0.92); border-radius: 50%; cursor: pointer; font-size: 17px; display: flex; align-items: center; justify-content: center; z-index: 2; opacity: 1; transition: var(--transition); line-height: 1; color: #bbb; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
 .feed-card .btn-star.active { color: #f0a030; }
 .feed-card .btn-star:hover { color: #f0a030; transform: scale(1.2); }
@@ -202,13 +203,13 @@ body {
 .feed-card .btn-hide svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 .feed-card.fade-out { opacity: 0; transform: scale(0.95); transition: opacity 0.3s, transform 0.3s; pointer-events: none; }
-.feed-card .feed-title { font-size: 14px; font-weight: 600; color: var(--text-primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 8px; line-height: 1.5; }
+.feed-card .feed-title { font-size: 16px; font-weight: 600; color: var(--text-primary); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 8px; line-height: 1.5; }
 .feed-card .feed-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
-.feed-card .feed-img-wrap { width: 100%; height: 140px; border-radius: 4px; margin-bottom: 10px; overflow: hidden; position: relative; }
+.feed-card .feed-img-wrap { width: 100%; height: 160px; border-radius: 6px; margin-bottom: 10px; overflow: hidden; position: relative; }
 .feed-card .feed-img-wrap img { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
-.feed-card .feed-img-wrap .fallback { width: 100%; height: 100%; }
-.feed-reason { font-size: 11px; color: var(--accent); margin-top: 4px; }
-.feed-type-badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: var(--bg-primary); color: var(--text-muted); border: 1px solid var(--border); }
+.feed-card .feed-img-wrap .fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 28px; color: rgba(255,255,255,0.85); font-weight: 700; }
+.feed-reason { font-size: 12px; color: var(--accent); margin-top: 6px; font-weight: 500; }
+.feed-type-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--bg-primary); color: var(--text-muted); border: 1px solid var(--border); }
 .feed-sentinel { height: 1px; }
 .feed-loading { text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px; }
 
