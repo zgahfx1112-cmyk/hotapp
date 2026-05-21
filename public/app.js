@@ -114,15 +114,15 @@ async function doRefresh() {
   const btn = $('#btnRefresh');
   btn.classList.add('spinning');
   try {
-    // Load cached data first — instant render
-    await Promise.all([loadHotData(), loadArticles(FIRST_SCREEN_ARTICLE_LIMIT), loadStats()]);
+    // Load cached data first — instant render, request more articles for variety
+    await Promise.all([loadHotData(), loadArticles(60), loadStats()]);
     state.feedItems = [];
     state.feedPage = 0;
     state.feedExhausted = false;
     renderTab();
     // Background fetch — update cache, re-render when done
     fetch('/api/fetch', { method: 'POST' }).then(() => {
-      return Promise.all([loadHotData(), loadArticles(FIRST_SCREEN_ARTICLE_LIMIT), loadStats()]);
+      return Promise.all([loadHotData(), loadArticles(60), loadStats()]);
     }).then(() => {
       state.feedItems = [];
       state.feedPage = 0;
@@ -333,8 +333,10 @@ function buildHybridFeed() {
   const unified = [];
   const now = Date.now();
 
-  // RSS → unified
-  for (const a of state.articles) {
+  // RSS → unified (shuffle pool for variety on each refresh)
+  const shuffledArticles = state.articles.slice().sort(() => Math.random() - 0.5);
+  const rssSample = shuffledArticles.slice(0, Math.min(25, shuffledArticles.length));
+  for (const a of rssSample) {
     unified.push({
       id: 'rss_' + a.id,
       title: a.title,
@@ -385,8 +387,8 @@ function buildHybridFeed() {
 
     score += Math.max(0, 10 - ageMin * 0.5);
 
-    // Random jitter: ±15 — fresh order every refresh
-    score += (Math.random() - 0.5) * 30;
+    // Random jitter: ±25 — noticeable shuffle every refresh
+    score += (Math.random() - 0.5) * 50;
 
     // Reason
     let reason = '热门推荐';
