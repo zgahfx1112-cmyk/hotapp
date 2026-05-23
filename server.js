@@ -59,7 +59,6 @@ app.get('/s/:code', (req, res) => {
   if (!row) return res.status(404).send('Link not found');
   res.redirect(302, row.url);
 });
-});
 
 // ── HotApp proxy (/api/hot/* → Python :8000) ──
 
