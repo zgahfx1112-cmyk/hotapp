@@ -42,6 +42,80 @@ app.get('/api/stats', (req, res) => {
   res.json(getStats());
 });
 
+// ── Share landing page ──
+
+app.get('/share', (req, res) => {
+  const { id } = req.query;
+  if (!id) return res.status(400).send('Missing id');
+
+  const prefix = id.startsWith('rss_') ? 'rss' : 'hot';
+  const numericId = id.replace('rss_', '').replace('h_', '');
+
+  let title = '', source = '', image = '', url = '', platform = '';
+
+  if (prefix === 'rss') {
+    const articles = getArticles({ limit: 200 });
+    const a = articles.articles.find(x => String(x.id) === numericId);
+    if (!a) return res.status(404).send('Article not found');
+    title = a.title;
+    source = a.source_name;
+    image = a.image_url || '';
+    url = a.link || '';
+  } else {
+    // Hot items aren't in DB, pass via query params
+    title = req.query.title || '';
+    source = req.query.source || '';
+    image = req.query.image || '';
+    url = req.query.url || '';
+    platform = req.query.platform || '';
+    if (!title) return res.status(400).send('Hot share requires title param');
+  }
+
+  const escaped = (s) => s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') : '';
+  const safeUrl = escaped(url || '#');
+  const safeTitle = escaped(title);
+  const safeSource = escaped(source);
+  const safeImage = escaped(image);
+
+  res.send(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>${safeTitle} - 今日热榜</title>
+<meta property="og:title" content="${safeTitle}">
+<meta property="og:description" content="来自${safeSource}的热门资讯">
+<meta property="og:image" content="${safeImage}">
+<meta property="og:url" content="${safeUrl}">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f6f8;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.card{max-width:420px;width:100%;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.12);overflow:hidden}
+.card-img{width:100%;height:200px;object-fit:cover;display:block}
+.card-body{padding:20px}
+.card-source{display:inline-block;padding:3px 10px;border-radius:4px;font-size:12px;font-weight:600;color:#fff;background:#4f6ef6;margin-bottom:8px}
+.card-title{font-size:18px;font-weight:700;line-height:1.5;margin-bottom:12px;color:#1a1a2e}
+.card-link{display:inline-flex;align-items:center;gap:6px;padding:10px 24px;background:#4f6ef6;color:#fff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;transition:background 0.15s}
+.card-link:hover{background:#3b5de7}
+.card-footer{padding:12px 20px;border-top:1px solid #e1e4e8;font-size:12px;color:#9498a8;text-align:center}
+.card-footer a{color:#4f6ef6;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="card">
+${safeImage ? `<img class="card-img" src="${safeImage}" alt="" onerror="this.style.display='none'">` : ''}
+<div class="card-body">
+<span class="card-source">${safeSource}</span>
+<div class="card-title">${safeTitle}</div>
+${safeUrl && safeUrl !== '#' ? `<a class="card-link" href="${safeUrl}" target="_blank" rel="noopener">阅读原文 →</a>` : ''}
+</div>
+<div class="footer"><a href="/">今日热榜</a> · 全网热点聚合</div>
+</div>
+</body>
+</html>`);
+});
+
 // ── HotApp proxy (/api/hot/* → Python :8000) ──
 
 app.use('/api/hot', (req, res) => {
