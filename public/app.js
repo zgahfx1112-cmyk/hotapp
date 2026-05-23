@@ -187,6 +187,37 @@ function extractKeywords(text) {
   return words;
 }
 
+// ── Share ──
+
+async function shareItem(item) {
+  const shareData = {
+    title: item.title,
+    text: item.title,
+    url: item.url || window.location.href
+  };
+  if (navigator.share) {
+    try { await navigator.share(shareData); }
+    catch (e) { if (e.name !== 'AbortError') copyLink(item.url); }
+  } else {
+    copyLink(item.url);
+  }
+}
+
+function copyLink(url) {
+  const text = url || window.location.href;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('链接已复制');
+  }).catch(() => {
+    const input = document.createElement('input');
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    input.remove();
+    showToast('链接已复制');
+  });
+}
+
 // ── Bookmarks ──
 
 function getBookmarks() {
@@ -581,15 +612,20 @@ function loadFeedPage() {
       card.className = 'feed-card';
       const starCls = isBookmarked(item.id) ? 'btn-star active' : 'btn-star';
       const starChar = isBookmarked(item.id) ? '⭐' : '☆';
-      card.innerHTML = `<button class="btn-hide" data-id="${escapeHtml(item.id)}"><svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button><button class="${starCls}" data-id="${escapeHtml(item.id)}">${starChar}</button>${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
+      const shareSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
+      card.innerHTML = `<button class="btn-hide" data-id="${escapeHtml(item.id)}"><svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button><button class="btn-share" data-id="${escapeHtml(item.id)}">${shareSvg}</button><button class="${starCls}" data-id="${escapeHtml(item.id)}">${starChar}</button>${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-star') || e.target.closest('.btn-hide')) return;
+        if (e.target.closest('.btn-star') || e.target.closest('.btn-hide') || e.target.closest('.btn-share')) return;
         state.recommender.recordView(item);
         if (item.url) window.open(item.url, '_blank');
       });
       card.querySelector('.btn-star').addEventListener('click', (e) => {
         e.stopPropagation();
         toggleBookmark(item);
+      });
+      card.querySelector('.btn-share').addEventListener('click', (e) => {
+        e.stopPropagation();
+        shareItem(item);
       });
       card.querySelector('.btn-hide').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -710,9 +746,10 @@ function renderHotList() {
         </div>
         <div class="heat-bar"><div class="heat-bar-fill" style="width:${pct}%"></div></div>
       </div>
-      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" data-hid="${item.id}" style="flex-shrink:0;font-size:20px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);margin-left:auto;padding:4px">${starred ? '⭐' : '☆'}</span>`;
+      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" data-hid="${item.id}" style="flex-shrink:0;font-size:20px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);margin-left:auto;padding:4px">${starred ? '⭐' : '☆'}</span>
+	      <span class="hot-share" data-shareid="${escapeHtml(item.id)}" style="flex-shrink:0;cursor:pointer;color:var(--text-muted);transition:var(--transition);padding:4px;display:flex;align-items:center"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span>`;
     div.addEventListener('click', (e) => {
-      if (e.target.closest('.bm-star')) return;
+      if (e.target.closest('.bm-star') || e.target.closest('.hot-share')) return;
       const found = state.hotItems.find(x => String(x.id) === div.dataset.id);
       if (found) { state.recommender.recordView(found); if (found.url) window.open(found.url, '_blank'); }
     });
@@ -728,6 +765,11 @@ function renderHotList() {
         el.style.color = starred2 ? '#f0a030' : '#ccc';
         el.classList.toggle('active', starred2);
       }
+    });
+    div.querySelector('.hot-share').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const found = state.hotItems.find(x => String(x.id) === e.currentTarget.dataset.shareid);
+      if (found) shareItem(found);
     });
     frag.appendChild(div);
   });
@@ -784,7 +826,8 @@ function renderRssList() {
     const summary = a.summary ? a.summary.replace(/<[^>]*>/g, '').trim() : '';
     return `<article class="rss-article-card" style="position:relative" data-bmid="${bmId}">
       ${img}
-      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" style="position:absolute;top:8px;right:8px;z-index:2;font-size:18px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);background:rgba(255,255,255,0.9);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.12)">${starred ? '⭐' : '☆'}</span>
+      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" style="position:absolute;top:8px;right:44px;z-index:2;font-size:18px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);background:rgba(255,255,255,0.9);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.12)">${starred ? '⭐' : '☆'}</span>
+	      <span class="rss-share" data-rssid="${escapeHtml(a.id)}" style="position:absolute;top:8px;right:8px;z-index:2;cursor:pointer;color:var(--text-muted);transition:var(--transition);background:rgba(255,255,255,0.9);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.12)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span>
       <div class="card-header">
         <span class="source-badge">${escapeHtml(a.source_name)}</span>
         <span class="card-time">${formatTime(a.pub_date)}</span>
@@ -809,6 +852,15 @@ function renderRssList() {
         el.style.color = starred ? '#f0a030' : '#ccc';
         el.classList.toggle('active', starred);
       }
+    });
+  });
+
+  list.querySelectorAll('.rss-share').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const a = state.articles.find(x => String(x.id) === el.dataset.rssid);
+      if (a) shareItem({ title: a.title, url: a.link || '' });
     });
   });
 
