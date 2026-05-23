@@ -302,20 +302,22 @@ body {
 .digest-item:hover { opacity: 0.8; }
 .digest-title { font-size: 13px; flex: 1; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 
-/* ── Share buttons ── */
+/* ── Card action bar ── */
 
-.feed-card .btn-share {
-  position: absolute; bottom: 12px; left: 12px; width: 34px; height: 34px;
-  border: none; background: rgba(255,255,255,0.92); border-radius: 50%;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  z-index: 2; transition: var(--transition); color: var(--text-muted);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.12); line-height: 1;
+.card-actions {
+  display: flex; gap: 4px; margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
-.feed-card .btn-share:hover { color: var(--accent); transform: scale(1.2); }
-
-.hot-share:hover { color: var(--accent); }
-
-.rss-share:hover { color: var(--accent); }
+.card-action-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 4px; border: none;
+  background: transparent; color: var(--text-muted); cursor: pointer;
+  font-size: 12px; transition: var(--transition); line-height: 1;
+}
+.card-action-btn:hover { color: var(--accent); background: var(--bg-hover); }
+.card-action-btn.active { color: #f0a030; }
+.card-action-btn.active:hover { color: #f0a030; }
+.card-action-muted:hover { color: var(--red); }
 
 /* ── Bookmark checkbox ── */
 

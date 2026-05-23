@@ -28,6 +28,27 @@ const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
 const FIRST_SCREEN_ARTICLE_LIMIT = 30;
 
+// ── SVG icons ──
+
+const ICON_SHARE = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
+const ICON_STAR_FILLED = '<svg viewBox="0 0 24 24" width="16" height="16" fill="#f0a030" stroke="#f0a030" stroke-width="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>';
+const ICON_STAR_EMPTY = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>';
+const ICON_HIDE = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function starIcon(starred) { return starred ? ICON_STAR_FILLED : ICON_STAR_EMPTY; }
+function starLabel(starred) { return starred ? '已收藏' : '收藏'; }
+
+function buildCardActions(config) {
+  const btns = [];
+  if (config.share) btns.push(`<button class="card-action-btn" data-action="share" title="分享">${ICON_SHARE}<span>分享</span></button>`);
+  if (config.bookmark) {
+    const s = config.bookmark.starred;
+    btns.push(`<button class="card-action-btn ${s ? 'active' : ''}" data-action="bookmark" title="收藏">${starIcon(s)}<span>${starLabel(s)}</span></button>`);
+  }
+  if (config.hide) btns.push(`<button class="card-action-btn card-action-muted" data-action="hide" title="不感兴趣">${ICON_HIDE}<span>不感兴趣</span></button>`);
+  return `<div class="card-actions">${btns.join('')}</div>`;
+}
+
 // ── Init ──
 
 async function init() {
@@ -114,13 +135,11 @@ async function doRefresh() {
   const btn = $('#btnRefresh');
   btn.classList.add('spinning');
   try {
-    // Load cached data first — instant render, request more articles for variety
     await Promise.all([loadHotData(), loadArticles(60), loadStats()]);
     state.feedItems = [];
     state.feedPage = 0;
     state.feedExhausted = false;
     renderTab();
-    // Background fetch — update cache, re-render when done
     fetch('/api/fetch', { method: 'POST' }).then(() => {
       return Promise.all([loadHotData(), loadArticles(60), loadStats()]);
     }).then(() => {
@@ -232,17 +251,9 @@ function toggleBookmark(item) {
     showToast('已收藏');
   }
   localStorage.setItem('toutiao_bookmarks', JSON.stringify(list));
-  updateStarButtons();
 }
 function isBookmarked(id) {
   return getBookmarks().some(b => b.id === id);
-}
-function updateStarButtons() {
-  document.querySelectorAll('.btn-star').forEach(el => {
-    const bmed = isBookmarked(el.dataset.id);
-    el.classList.toggle('active', bmed);
-    el.textContent = bmed ? '⭐' : '☆';
-  });
 }
 
 // ── Dislike ──
@@ -364,13 +375,10 @@ function buildHybridFeed() {
   const unified = [];
   const now = Date.now();
 
-  // Session dedup: track items shown this session
   const shownIds = JSON.parse(sessionStorage.getItem('toutiao_shown') || '[]');
 
-  // RSS → unified (all articles participate in scoring)
   for (const a of state.articles) {
     const id = 'rss_' + a.id;
-    // Skip items already shown this session
     if (shownIds.includes(id)) continue;
     unified.push({
       id,
@@ -384,9 +392,7 @@ function buildHybridFeed() {
     });
   }
 
-  // Hot → unified
   for (const h of state.hotItems) {
-    // Skip items already shown this session
     if (shownIds.includes(h.id)) continue;
     unified.push({
       id: h.id,
@@ -402,7 +408,6 @@ function buildHybridFeed() {
   }
 
   if (!unified.length) {
-    // Pool exhausted — reset shown list, allow repeats but mark as replay
     sessionStorage.removeItem('toutiao_shown');
     const replay = [];
     for (const a of state.articles) {
@@ -436,10 +441,8 @@ function buildHybridFeed() {
 
     score += Math.max(0, 10 - ageMin * 0.5);
 
-    // Random jitter: ±25 — noticeable shuffle every refresh
     score += (Math.random() - 0.5) * 50;
 
-    // Reason
     let reason = '热门推荐';
     for (const tag of state.recommender.interests) {
       const kws = TOPIC_KEYWORDS[tag] || [];
@@ -451,12 +454,10 @@ function buildHybridFeed() {
 
   scored.sort((a, b) => b.score - a.score);
 
-  // Diversity: ensure both types in top 8
   const top8 = scored.slice(0, 8);
   const rssCount = top8.filter(i => i.type === 'rss').length;
   const hotCount = top8.filter(i => i.type === 'hot').length;
   if (rssCount < 2 && hotCount > 0) {
-    // Boost highest-scoring RSS that isn't in top 8
     const bestRss = scored.filter(i => i.type === 'rss').find(i => !top8.includes(i));
     if (bestRss) bestRss.score += 5;
   } else if (hotCount < 2 && rssCount > 0) {
@@ -466,7 +467,6 @@ function buildHybridFeed() {
   scored.sort((a, b) => b.score - a.score);
 
   const ranked = rerankCandidates(scored);
-  // Record shown items to sessionStorage for session dedup
   const topIds = ranked.slice(0, 30).map(i => i.id);
   shownIds.push(...topIds);
   sessionStorage.setItem('toutiao_shown', JSON.stringify(shownIds));
@@ -477,7 +477,6 @@ function buildHybridFeed() {
 // ── Daily Digest ──
 
 function renderDailyDigest() {
-  // Always show: top 5 from hot items
   const top5 = selectRecommendDigestItems(state.hotItems);
   if (!top5.length) return '';
 
@@ -525,10 +524,7 @@ function renderSubTabs(items, activeKey, onClick) {
 function renderRecommendTab() {
   const area = $('#contentArea');
 
-  // Daily digest
   const digestHtml = renderDailyDigest();
-
-  // Interest tags
   renderInterestTags();
 
   if (!state.feedItems.length) {
@@ -544,13 +540,11 @@ function renderRecommendTab() {
     <div class="feed-loading" id="feedLoading">⏳ 加载中...</div>
   `;
 
-  // Dislike management bar
   const disliked = getDisliked();
   if (disliked.length) {
     area.insertAdjacentHTML('beforeend', `<div class="dislike-bar" id="dislikeBar">已屏蔽 ${disliked.length} 个关键词 · 点击管理</div>`);
   }
 
-  // Reason breakdown
   const interests = state.recommender.interests;
   if (interests.length) {
     area.insertAdjacentHTML('beforeend', `<div class="reason-summary">推荐依据：${interests.map(t => `<span class="reason-tag">${t}</span>`).join('')}</div>`);
@@ -610,31 +604,32 @@ function loadFeedPage() {
         : `<div class="feed-img-wrap"><div class="fallback" style="background:${g};display:flex">${icon}</div></div>`;
       const card = document.createElement('div');
       card.className = 'feed-card';
-      const starCls = isBookmarked(item.id) ? 'btn-star active' : 'btn-star';
-      const starChar = isBookmarked(item.id) ? '⭐' : '☆';
-      const shareSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
-      card.innerHTML = `<button class="btn-hide" data-id="${escapeHtml(item.id)}"><svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button><button class="btn-share" data-id="${escapeHtml(item.id)}">${shareSvg}</button><button class="${starCls}" data-id="${escapeHtml(item.id)}">${starChar}</button>${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>`;
+      const starred = isBookmarked(item.id);
+      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, hide: true })}`;
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-star') || e.target.closest('.btn-hide') || e.target.closest('.btn-share')) return;
+        if (e.target.closest('.card-action-btn')) return;
         state.recommender.recordView(item);
         if (item.url) window.open(item.url, '_blank');
       });
-      card.querySelector('.btn-star').addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleBookmark(item);
-      });
-      card.querySelector('.btn-share').addEventListener('click', (e) => {
+      card.querySelector('[data-action="share"]').addEventListener('click', (e) => {
         e.stopPropagation();
         shareItem(item);
       });
-      card.querySelector('.btn-hide').addEventListener('click', (e) => {
+      card.querySelector('[data-action="bookmark"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleBookmark(item);
+        const nowStarred = isBookmarked(item.id);
+        const btn = e.currentTarget;
+        btn.classList.toggle('active', nowStarred);
+        btn.innerHTML = `${starIcon(nowStarred)}<span>${starLabel(nowStarred)}</span>`;
+      });
+      card.querySelector('[data-action="hide"]').addEventListener('click', (e) => {
         e.stopPropagation();
         const titleKws = extractKeywords(item.title);
         addDislike(item.title);
         card.classList.add('fade-out');
         setTimeout(() => { card.remove(); }, 300);
         state.feedItems = buildHybridFeed();
-        // Show feedback toast
         const kw = titleKws.length ? titleKws[0] : item.title.slice(0, 10);
         showToast(`已减少"${kw}"相关内容`);
       });
@@ -649,7 +644,6 @@ function loadFeedPage() {
 function renderHotTab() {
   const area = $('#contentArea');
 
-  // Build platform sub-tabs
   const platforms = {};
   for (const item of state.hotItems) {
     if (!platforms[item.platform]) platforms[item.platform] = getPlatformName(item.platform);
@@ -659,7 +653,6 @@ function renderHotTab() {
   renderSubTabs(platList, state.hotFilter, (key) => {
     state.hotFilter = key;
     localStorage.setItem('toutiao_hotFilter', key || '');
-    // 清空列表 + 重置分页 + 重建 observer
     const list = $('#trendingList');
     if (list) list.innerHTML = '';
     if (state.hotObserver) { state.hotObserver.disconnect(); state.hotObserver = null; }
@@ -667,7 +660,6 @@ function renderHotTab() {
     state.hotLoading = false;
     state.hotExhausted = false;
     renderHotList();
-    // 重建 IntersectionObserver（renderHotList 已递增 hotPage）
     state.hotObserver = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting && !state.hotLoading && !state.hotExhausted) {
         renderHotList();
@@ -677,10 +669,8 @@ function renderHotTab() {
     if (sentinel) state.hotObserver.observe(sentinel);
   });
 
-  // Error banner
   renderErrorBanner();
 
-  // List + sentinel
   area.insertAdjacentHTML('beforeend', '<div class="trending-list" id="trendingList"></div><div class="feed-sentinel" id="hotSentinel"></div><div class="feed-loading" id="hotLoading" style="display:none">⏳ 加载中...</div>');
 
   hotResetPagination();
@@ -745,31 +735,29 @@ function renderHotList() {
           <span>${timeAgo(item.timestamp)}</span>
         </div>
         <div class="heat-bar"><div class="heat-bar-fill" style="width:${pct}%"></div></div>
-      </div>
-      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" data-hid="${item.id}" style="flex-shrink:0;font-size:20px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);margin-left:auto;padding:4px">${starred ? '⭐' : '☆'}</span>
-	      <span class="hot-share" data-shareid="${escapeHtml(item.id)}" style="flex-shrink:0;cursor:pointer;color:var(--text-muted);transition:var(--transition);padding:4px;display:flex;align-items:center"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span>`;
+        ${buildCardActions({ share: true, bookmark: { starred, bmid: bmId, hid: item.id } })}
+      </div>`;
     div.addEventListener('click', (e) => {
-      if (e.target.closest('.bm-star') || e.target.closest('.hot-share')) return;
+      if (e.target.closest('.card-action-btn')) return;
       const found = state.hotItems.find(x => String(x.id) === div.dataset.id);
       if (found) { state.recommender.recordView(found); if (found.url) window.open(found.url, '_blank'); }
     });
-    div.querySelector('.bm-star').addEventListener('click', (e) => {
+    div.querySelector('[data-action="share"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const found = state.hotItems.find(x => String(x.id) === div.dataset.id);
+      if (found) shareItem(found);
+    });
+    div.querySelector('[data-action="bookmark"]').addEventListener('click', (e) => {
       e.stopPropagation();
       const el = e.currentTarget;
       const found = state.hotItems.find(x => String(x.id) === el.dataset.hid);
       if (found) {
         const bm = { id: el.dataset.bmid, title: found.title, url: found.url || '', source: getPlatformName(found.platform), type: 'hot', platform: found.platform, image: found.image || null };
         toggleBookmark(bm);
-        const starred2 = isBookmarked(el.dataset.bmid);
-        el.textContent = starred2 ? '⭐' : '☆';
-        el.style.color = starred2 ? '#f0a030' : '#ccc';
-        el.classList.toggle('active', starred2);
+        const nowStarred = isBookmarked(el.dataset.bmid);
+        el.classList.toggle('active', nowStarred);
+        el.innerHTML = `${starIcon(nowStarred)}<span>${starLabel(nowStarred)}</span>`;
       }
-    });
-    div.querySelector('.hot-share').addEventListener('click', (e) => {
-      e.stopPropagation();
-      const found = state.hotItems.find(x => String(x.id) === e.currentTarget.dataset.shareid);
-      if (found) shareItem(found);
     });
     frag.appendChild(div);
   });
@@ -798,7 +786,6 @@ function renderRssTab() {
     loadArticles(100, state.rssFilter).then(() => renderRssList());
   });
 
-  // Freshness indicator
   const srcCount = state.sources.length;
   const lastFetch = state.stats?.lastFetch ? formatTime(state.stats.lastFetch) : '尚未更新';
   area.insertAdjacentHTML('beforeend', `<div class="rss-freshness">📡 ${srcCount} 个数据源 · 最近更新: ${lastFetch}</div>`);
@@ -824,20 +811,29 @@ function renderRssList() {
     const bmId = 'rss_' + a.id;
     const starred = isBookmarked(bmId);
     const summary = a.summary ? a.summary.replace(/<[^>]*>/g, '').trim() : '';
-    return `<article class="rss-article-card" style="position:relative" data-bmid="${bmId}">
+    return `<article class="rss-article-card" data-bmid="${bmId}">
       ${img}
-      <span class="bm-star ${starred ? 'active' : ''}" data-bmid="${bmId}" style="position:absolute;top:8px;right:44px;z-index:2;font-size:18px;cursor:pointer;color:${starred ? '#f0a030' : '#999'};transition:var(--transition);background:rgba(255,255,255,0.9);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.12)">${starred ? '⭐' : '☆'}</span>
-	      <span class="rss-share" data-rssid="${escapeHtml(a.id)}" style="position:absolute;top:8px;right:8px;z-index:2;cursor:pointer;color:var(--text-muted);transition:var(--transition);background:rgba(255,255,255,0.9);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.12)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span>
       <div class="card-header">
         <span class="source-badge">${escapeHtml(a.source_name)}</span>
         <span class="card-time">${formatTime(a.pub_date)}</span>
       </div>
       <h3 class="card-title"><a href="${escapeHtml(a.link || '#')}" target="_blank" rel="noopener">${escapeHtml(a.title)}</a></h3>
       ${summary ? `<p class="card-summary card-summary-clamp" data-expanded="false">${escapeHtml(summary)}</p><button class="summary-toggle">展开全文</button>` : ''}
+      ${buildCardActions({ share: true, bookmark: { starred, bmid: bmId } })}
     </article>`;
   }).join('');
 
-  list.querySelectorAll('.rss-article-card .bm-star').forEach(el => {
+  list.querySelectorAll('.rss-article-card [data-action="share"]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const card = el.closest('.rss-article-card');
+      const a = state.articles.find(x => String(x.id) === card.dataset.bmid.replace('rss_', ''));
+      if (a) shareItem({ title: a.title, url: a.link || '' });
+    });
+  });
+
+  list.querySelectorAll('.rss-article-card [data-action="bookmark"]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       e.preventDefault();
@@ -847,24 +843,13 @@ function renderRssList() {
       if (a) {
         const bm = { id: bmId, title: a.title, url: a.link || '', source: a.source_name, type: 'rss', platform: '', image: a.image_url || null };
         toggleBookmark(bm);
-        const starred = isBookmarked(bmId);
-        el.textContent = starred ? '⭐' : '☆';
-        el.style.color = starred ? '#f0a030' : '#ccc';
-        el.classList.toggle('active', starred);
+        const nowStarred = isBookmarked(bmId);
+        el.classList.toggle('active', nowStarred);
+        el.innerHTML = `${starIcon(nowStarred)}<span>${starLabel(nowStarred)}</span>`;
       }
     });
   });
 
-  list.querySelectorAll('.rss-share').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      const a = state.articles.find(x => String(x.id) === el.dataset.rssid);
-      if (a) shareItem({ title: a.title, url: a.link || '' });
-    });
-  });
-
-  // Summary toggle
   list.querySelectorAll('.summary-toggle').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -876,8 +861,7 @@ function renderRssList() {
       btn.textContent = expanded ? '展开全文' : '收起';
     });
   });
-
-  }
+}
 
 // ── Bookmark tab ──
 
@@ -885,7 +869,7 @@ function renderBookmarkTab() {
   const area = $('#contentArea');
   const items = getBookmarks();
   if (!items.length) {
-    area.innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><p>暂无收藏</p><p style="font-size:12px;margin-top:4px">在文章中点击 ⭐ 收藏</p></div>`;
+    area.innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><p>暂无收藏</p><p style="font-size:12px;margin-top:4px">在文章中点击收藏按钮收藏</p></div>`;
     return;
   }
 
@@ -912,7 +896,6 @@ function renderBookmarkTab() {
     </div>`).join('')}</div>
     ${isBatch ? '<div style="text-align:center;margin-top:8px"><button class="manage-clear" id="batchDeleteBtn">删除选中</button></div>' : ''}`;
 
-  // Export
   const exportBtn = document.getElementById('exportBookmarksBtn');
   if (exportBtn) {
     exportBtn.addEventListener('click', () => {
@@ -927,7 +910,6 @@ function renderBookmarkTab() {
     });
   }
 
-  // Batch toggle
   const batchBtn = document.getElementById('batchBookmarkBtn');
   if (batchBtn) {
     batchBtn.addEventListener('click', () => {
@@ -936,7 +918,6 @@ function renderBookmarkTab() {
     });
   }
 
-  // Batch delete
   const batchDel = document.getElementById('batchDeleteBtn');
   if (batchDel) {
     batchDel.addEventListener('click', () => {
@@ -988,7 +969,6 @@ function renderHistoryTab() {
   document.querySelectorAll('.history-item').forEach(el => {
     el.addEventListener('click', () => {
       let url = el.dataset.hurl;
-      // Fallback: lookup by title in current data
       if (!url) {
         const title = el.dataset.htitle;
         const found = state.articles.find(a => a.title === title) || state.hotItems.find(h => h.title === title);
@@ -1009,7 +989,6 @@ function renderHistoryTab() {
 
 function renderInterestTags() {
   const area = $('#contentArea');
-  // Only render if we're in recommend tab
   if (state.currentTab !== 'recommend') return;
   const existing = $('#interestTags');
   if (existing) return;
@@ -1059,7 +1038,6 @@ function setupTabs() {
     tab.classList.add('active');
     state.currentTab = tab.dataset.tab;
 
-    // Reset content area
     $('#contentArea').innerHTML = '';
     $('#subTabBar').innerHTML = '';
     $('#errorBanner').innerHTML = '';
@@ -1131,13 +1109,11 @@ function getUserStats() {
     const raw = localStorage.getItem('toutiao_userStats');
     if (raw) stats = JSON.parse(raw);
   } catch {}
-  // Update days used
   const first = stats.firstVisit;
   const days = Math.max(1, Math.floor((Date.now() - first) / 86400000) + 1);
   stats.daysUsed = days;
   stats.bookmarkCount = getBookmarks().length;
   stats.readCount = state.recommender.history.length;
-  // Update header stats
   const hs = $('#headerStats');
   if (hs) hs.textContent = `📖${stats.readCount} ⭐${stats.bookmarkCount} 📅${stats.daysUsed}天`;
   localStorage.setItem('toutiao_userStats', JSON.stringify({ ...stats, bookmarkCount: undefined, readCount: undefined }));
