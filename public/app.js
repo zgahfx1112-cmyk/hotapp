@@ -516,6 +516,7 @@ function renderTab() {
   else if (state.currentTab === 'rss') renderRssTab();
   else if (state.currentTab === 'bookmark') renderBookmarkTab();
   else if (state.currentTab === 'history') renderHistoryTab();
+  else if (state.currentTab === 'dislike') renderDislikeTab();
 }
 
 function renderSubTabs(items, activeKey, onClick) {
@@ -551,11 +552,6 @@ function renderRecommendTab() {
     <div class="feed-sentinel" id="feedSentinel"></div>
     <div class="feed-loading" id="feedLoading">⏳ 加载中...</div>
   `;
-
-  const disliked = getDisliked();
-  if (disliked.length) {
-    area.insertAdjacentHTML('beforeend', `<div class="dislike-bar" id="dislikeBar">已屏蔽 ${disliked.length} 个关键词 · 点击管理</div>`);
-  }
 
   const interests = state.recommender.interests;
   if (interests.length) {
@@ -997,6 +993,32 @@ function renderHistoryTab() {
   });
 }
 
+function renderDislikeTab() {
+  const area = $('#contentArea');
+  const disliked = getDisliked();
+  if (!disliked.length) {
+    area.innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><line x1="1" y1="1" x2="23" y2="23"/></svg><p>暂无屏蔽关键词</p></div>`;
+    return;
+  }
+  area.innerHTML = `<div class="dislike-manage">
+    <h3 style="font-size:15px;font-weight:600;margin-bottom:12px">已屏蔽的关键词</h3>
+    <div class="dislike-tags">${disliked.map(kw => `<span class="manage-tag">${escapeHtml(kw)}<span class="del" data-kw="${escapeHtml(kw)}">×</span></span>`).join('')}</div>
+    <button class="manage-clear" id="manageClearAll">清除全部</button>
+  </div>`;
+  area.querySelectorAll('.del').forEach(el => {
+    el.addEventListener('click', () => {
+      removeDislike(el.dataset.kw);
+      showToast('已移除');
+      renderDislikeTab();
+    });
+  });
+  area.querySelector('#manageClearAll').addEventListener('click', () => {
+    clearDisliked();
+    showToast('已清除全部');
+    renderDislikeTab();
+  });
+}
+
 // ── Interest tags ──
 
 function renderInterestTags() {
@@ -1043,18 +1065,34 @@ function renderErrorBanner() {
 // ── Tab switching setup ──
 
 function setupTabs() {
-  $('#mainTabs').addEventListener('click', (e) => {
-    const tab = e.target.closest('.tab');
-    if (!tab) return;
+  const activateTab = (tab) => {
+    // Clear active from both tab bars
     $('#mainTabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    state.currentTab = tab.dataset.tab;
+    $('#utilityTabs').querySelectorAll('.utility-tab').forEach(t => t.classList.remove('active'));
 
+    if (tab.classList.contains('tab')) {
+      tab.classList.add('active');
+    } else {
+      tab.classList.add('active');
+    }
+
+    state.currentTab = tab.dataset.tab;
     $('#contentArea').innerHTML = '';
     $('#subTabBar').innerHTML = '';
     $('#errorBanner').innerHTML = '';
-
     renderTab();
+  };
+
+  $('#mainTabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    activateTab(tab);
+  });
+
+  $('#utilityTabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.utility-tab');
+    if (!tab) return;
+    activateTab(tab);
   });
 }
 
@@ -1193,41 +1231,6 @@ function setupBrowserEvents() {
   }, { passive: true });
 
   $('#btnTheme').addEventListener('click', toggleTheme);
-
-  document.addEventListener('click', (e) => {
-    const bar = e.target.closest('#dislikeBar');
-    if (!bar) {
-      const overlay = e.target.closest('.manage-overlay');
-      if (!overlay && document.querySelector('.manage-overlay')) {
-        document.querySelector('.manage-overlay').remove();
-      }
-      return;
-    }
-    const disliked = getDisliked();
-    const existing = document.querySelector('.manage-overlay');
-    if (existing) existing.remove();
-    const ov = document.createElement('div');
-    ov.className = 'manage-overlay';
-    ov.innerHTML = `<div class="manage-box">
-      <h3>已屏蔽的关键词</h3>
-      ${disliked.length ? disliked.map(kw => `<span class="manage-tag">${escapeHtml(kw)}<span class="del" data-kw="${escapeHtml(kw)}">×</span></span>`).join('') : '<p style="font-size:13px;color:var(--text-muted)">暂无屏蔽词</p>'}
-      ${disliked.length ? '<button class="manage-clear" id="manageClearAll">清除全部</button>' : ''}
-    </div>`;
-    document.body.appendChild(ov);
-    ov.querySelectorAll('.del').forEach(el => {
-      el.addEventListener('click', () => {
-        removeDislike(el.dataset.kw);
-        showToast('已移除');
-        el.closest('.manage-overlay').remove();
-      });
-    });
-    const clearBtn = ov.querySelector('#manageClearAll');
-    if (clearBtn) clearBtn.addEventListener('click', () => {
-      clearDisliked();
-      showToast('已清除全部');
-      ov.remove();
-    });
-  });
 
   document.addEventListener('DOMContentLoaded', () => {
     if (typeof createInitController === 'undefined') {

@@ -108,7 +108,7 @@ body {
 /* ── Tabs (primary) ── */
 
 .tabs {
-  display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;
+  display: flex; gap: 6px; margin-bottom: 4px; flex-wrap: wrap;
 }
 .tab {
   padding: 8px 20px; border-radius: 8px; font-size: 14px; font-weight: 600;
@@ -117,6 +117,19 @@ body {
 }
 .tab:hover { background: var(--bg-hover); color: var(--text-primary); }
 .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── Utility tabs ── */
+
+.utility-tabs {
+  display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.utility-tab {
+  padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 500;
+  cursor: pointer; border: 1px solid var(--border); background: transparent;
+  color: var(--text-muted); transition: var(--transition);
+}
+.utility-tab:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.utility-tab.active { background: var(--bg-hover); color: var(--text-primary); border-color: var(--accent); }
 
 /* ── Sub-tabs ── */
 
@@ -252,8 +265,8 @@ body {
 
 /* ── Dislike management ── */
 
-.dislike-bar { text-align: center; padding: 12px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
-.dislike-bar:hover { color: var(--text-primary); }
+.dislike-manage { padding: 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+.dislike-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 
 .reason-summary { text-align: center; padding: 4px 12px 12px; font-size: 12px; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
 .reason-tag { display: inline-block; padding: 1px 8px; background: var(--accent); color: #fff; border-radius: 10px; font-size: 11px; }
