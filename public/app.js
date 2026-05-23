@@ -210,17 +210,31 @@ function extractKeywords(text) {
 
 async function shareItem(item) {
   const url = item.url || window.location.href;
+  const shortUrl = await getShortLink(item, url);
   const shareData = {
     title: item.title,
     text: `${item.title} — 来自${item.source || '今日热榜'}`,
-    url
+    url: shortUrl
   };
   if (navigator.share) {
     try { await navigator.share(shareData); }
-    catch (e) { if (e.name !== 'AbortError') copyLink(url); }
+    catch (e) { if (e.name !== 'AbortError') copyLink(shortUrl); }
   } else {
-    copyLink(url);
+    copyLink(shortUrl);
   }
+}
+
+async function getShortLink(item, originalUrl) {
+  try {
+    const res = await fetch('/api/shorten', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: originalUrl, title: item.title, source: item.source || '', image: item.image || '', platform: item.platform || '' })
+    });
+    const data = await res.json();
+    if (data.short) return data.short;
+  } catch {}
+  return originalUrl;
 }
 
 function copyLink(url) {

@@ -49,6 +49,17 @@ async function initDb(dbPath) {
   db.run('CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_articles_date ON articles(pub_date DESC)');
 
+  db.run(`CREATE TABLE IF NOT EXISTS short_links (
+    code TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    title TEXT DEFAULT '',
+    source TEXT DEFAULT '',
+    image TEXT DEFAULT '',
+    platform TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_short_links_code ON short_links(code)');
+
   // Seed sources
   const sources = loadSourcesConfig();
   for (const s of sources) {
@@ -138,4 +149,38 @@ function insertArticle(guid, title, link, summary, sourceId, pubDate) {
   }
 }
 
-module.exports = { initDb, save, getArticles, getSources, getStats, logFetch, insertArticle };
+function createShortLink(url, title, source, image, platform) {
+  // Check if URL already has a short link
+  const existing = db.exec(`SELECT code FROM short_links WHERE url = '${url.replace(/'/g, "''")}'`);
+  if (existing.length && existing[0].values.length) return existing[0].values[0][0];
+
+  // Generate 6-char code
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let code;
+  do {
+    code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    const check = db.exec(`SELECT code FROM short_links WHERE code = '${code}'`);
+    if (!check.length || !check[0].values.length) break;
+  } while (true);
+
+  db.run(
+    'INSERT INTO short_links (code, url, title, source, image, platform) VALUES (?, ?, ?, ?, ?, ?)',
+    [code, url, title, source, image, platform]
+  );
+  return code;
+}
+
+function resolveShortLink(code) {
+  const stmt = db.prepare('SELECT url, title, source, image FROM short_links WHERE code = ?');
+  stmt.bind([code]);
+  if (stmt.step()) {
+    const row = stmt.getAsObject();
+    stmt.free();
+    return row;
+  }
+  stmt.free();
+  return null;
+}
+
+module.exports = { initDb, save, getArticles, getSources, getStats, logFetch, insertArticle, createShortLink, resolveShortLink };

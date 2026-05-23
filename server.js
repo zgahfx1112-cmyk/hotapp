@@ -3,7 +3,7 @@ const cron = require('node-cron');
 const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
-const { initDb, save, getArticles, getSources, getStats } = require('./db');
+const { initDb, save, getArticles, getSources, getStats, createShortLink, resolveShortLink } = require('./db');
 const { fetchAll } = require('./fetch');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'toutiao.db');
@@ -42,40 +42,26 @@ app.get('/api/stats', (req, res) => {
   res.json(getStats());
 });
 
-// ── Share landing page ──
+// ── Short link API ──
 
-app.get('/share', (req, res) => {
-  const { id } = req.query;
-  if (!id) return res.status(400).send('Missing id');
+app.post('/api/shorten', (req, res) => {
+  const { url, title, source, image, platform } = req.body;
+  if (!url) return res.status(400).json({ error: 'Missing url' });
 
-  const prefix = id.startsWith('rss_') ? 'rss' : 'hot';
-  const numericId = id.replace('rss_', '').replace('h_', '');
+  const code = createShortLink(url, title || '', source || '', image || '', platform || '');
+  const short = `${req.protocol}://${req.get('host')}/s/${code}`;
+  res.json({ short, code });
+});
 
-  let title = '', source = '', image = '', url = '', platform = '';
-
-  if (prefix === 'rss') {
-    const articles = getArticles({ limit: 200 });
-    const a = articles.articles.find(x => String(x.id) === numericId);
-    if (!a) return res.status(404).send('Article not found');
-    title = a.title;
-    source = a.source_name;
-    image = a.image_url || '';
-    url = a.link || '';
-  } else {
-    // Hot items aren't in DB, pass via query params
-    title = req.query.title || '';
-    source = req.query.source || '';
-    image = req.query.image || '';
-    url = req.query.url || '';
-    platform = req.query.platform || '';
-    if (!title) return res.status(400).send('Hot share requires title param');
-  }
+app.get('/s/:code', (req, res) => {
+  const row = resolveShortLink(req.params.code);
+  if (!row) return res.status(404).send('Link not found');
 
   const escaped = (s) => s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') : '';
-  const safeUrl = escaped(url || '#');
-  const safeTitle = escaped(title);
-  const safeSource = escaped(source);
-  const safeImage = escaped(image);
+  const safeUrl = escaped(row.url);
+  const safeTitle = escaped(row.title);
+  const safeSource = escaped(row.source);
+  const safeImage = escaped(row.image);
 
   res.send(`<!DOCTYPE html>
 <html lang="zh-CN">
@@ -108,9 +94,9 @@ ${safeImage ? `<img class="card-img" src="${safeImage}" alt="" onerror="this.sty
 <div class="card-body">
 <span class="card-source">${safeSource}</span>
 <div class="card-title">${safeTitle}</div>
-${safeUrl && safeUrl !== '#' ? `<a class="card-link" href="${safeUrl}" target="_blank" rel="noopener">阅读原文 →</a>` : ''}
+${safeUrl ? `<a class="card-link" href="${safeUrl}" target="_blank" rel="noopener">阅读原文 →</a>` : ''}
 </div>
-<div class="footer"><a href="/">今日热榜</a> · 全网热点聚合</div>
+<div class="card-footer"><a href="/">今日热榜</a> · 全网热点聚合</div>
 </div>
 </body>
 </html>`);
