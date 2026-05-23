@@ -49,6 +49,7 @@ app.post('/api/shorten', (req, res) => {
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
   const code = createShortLink(url, title || '', source || '', image || '', platform || '');
+  save(DB_PATH);
   const short = `${req.protocol}://${req.get('host')}/s/${code}`;
   res.json({ short, code });
 });
