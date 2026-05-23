@@ -208,29 +208,18 @@ function extractKeywords(text) {
 
 // ── Share ──
 
-function buildShareUrl(item) {
-  const base = window.location.origin + '/share?id=' + encodeURIComponent(item.id);
-  const params = new URLSearchParams();
-  if (item.title) params.set('title', item.title);
-  if (item.source) params.set('source', item.source);
-  if (item.image) params.set('image', item.image);
-  if (item.url) params.set('url', item.url);
-  if (item.platform) params.set('platform', item.platform);
-  return base + '&' + params.toString();
-}
-
 async function shareItem(item) {
-  const shareUrl = buildShareUrl(item);
+  const url = item.url || window.location.href;
   const shareData = {
     title: item.title,
     text: `${item.title} — 来自${item.source || '今日热榜'}`,
-    url: shareUrl
+    url
   };
   if (navigator.share) {
     try { await navigator.share(shareData); }
-    catch (e) { if (e.name !== 'AbortError') copyLink(shareUrl); }
+    catch (e) { if (e.name !== 'AbortError') copyLink(url); }
   } else {
-    copyLink(shareUrl);
+    copyLink(url);
   }
 }
 
