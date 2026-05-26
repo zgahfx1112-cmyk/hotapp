@@ -31,15 +31,6 @@ def parse_weibo(data):
              "heatScore": x.get("num") or x.get("raw_hot") or (9000-i*200),
              "image": x.get("icon") or None} for i,x in enumerate(items[:100])]  # 增加到100条
 
-def parse_bilibili(data):
-    items = (data.get("data", {}) or {}).get("trending", {}) or {}
-    items = items.get("list") or []
-    return [{"id": f"bilibili_{i}", "title": x.get("show_name") or x.get("keyword",""),
-             "url": f"https://search.bilibili.com/all?keyword={urllib.parse.quote(x.get('keyword') or x.get('show_name',''))}",
-             "platform": "bilibili", "rank": i+1,
-             "heatScore": x.get("heat_score") or (8000-i*300),
-             "image": x.get("icon") or None} for i,x in enumerate(items[:100])]  # 增加到100条
-
 def parse_douyin(data):
     items = (data.get("data", {}) or {}).get("trending_list") or []
     result = []
@@ -116,14 +107,6 @@ def parse_tieba(data):
              "platform": "tieba", "rank": i+1,
              "heatScore": x.get("discuss_num") or (7500-i*80),
              "image": x.get("topic_pic") or None} for i,x in enumerate(items[:100])]  # 增加到100条
-
-def parse_bilibili_popular(data):
-    items = data.get("data", {}).get("list") or []
-    return [{"id": f"bili_pop_{i}", "title": x.get("title", ""),
-             "url": f"https://www.bilibili.com/video/{x.get('bvid','')}",
-             "platform": "bilibili_pop", "rank": i+1,
-             "heatScore": x.get("stat", {}).get("view") or (6000-i*50),
-             "image": x.get("pic") or None} for i,x in enumerate(items[:100])]  # 增加到100条
 
 def parse_36kr_hot(data):
     """36氪快讯（独立平台，与 RSS 36氪区分）"""
@@ -286,22 +269,6 @@ PLATFORMS = {
         "url": "https://weibo.com/ajax/side/hotSearch",
         "hdrs": {"User-Agent": UA, "Referer": "https://weibo.com/", "X-Requested-With": "XMLHttpRequest"},
         "parse": parse_weibo},
-    "bilibili": {"name": "B站热搜",
-        "url": "https://api.bilibili.com/x/web-interface/search/square?limit=50",
-        "hdrs": {"User-Agent": UA, "Referer": "https://www.bilibili.com/",
-                 "Accept": "application/json, text/plain, */*",
-                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-                 "Accept-Encoding": "gzip, deflate, br",
-                 "Origin": "https://www.bilibili.com"},
-        "parse": parse_bilibili},
-    "bilibili_pop": {"name": "B站热门",
-        "url": "https://api.bilibili.com/x/web-interface/popular?ps=50",
-        "hdrs": {"User-Agent": UA, "Referer": "https://www.bilibili.com/",
-                 "Accept": "application/json, text/plain, */*",
-                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-                 "Accept-Encoding": "gzip, deflate, br",
-                 "Origin": "https://www.bilibili.com"},
-        "parse": parse_bilibili_popular},
     "douyin": {"name": "抖音",
         "url": "https://www.douyin.com/aweme/v1/web/hot/search/list/?detail_list=1&count=100",
         "hdrs": {"User-Agent": UA, "Referer": "https://www.douyin.com/"},
