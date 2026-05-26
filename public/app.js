@@ -522,10 +522,11 @@ function renderTab() {
   else if (state.currentTab === 'dislike') renderDislikeTab();
 }
 
-function renderSubTabs(items, activeKey, onClick) {
+function renderSubTabs(items, activeKey, onClick, showAll = true) {
   const bar = $('#subTabBar');
+  const allBtn = showAll ? `<button class="sub-tab ${!activeKey ? 'active' : ''}" data-key="">全部</button>` : '';
   bar.innerHTML = `<div class="sub-tabs">
-    <button class="sub-tab ${!activeKey ? 'active' : ''}" data-key="">全部</button>
+    ${allBtn}
     ${items.map(k => `<button class="sub-tab ${activeKey === k.key ? 'active' : ''}" data-key="${k.key}">${k.label}</button>`).join('')}
   </div>`;
   bar.querySelectorAll('.sub-tab').forEach(btn => {
@@ -661,9 +662,15 @@ function renderHotTab() {
   }
   const platList = Object.entries(platforms).map(([k, v]) => ({ key: k, label: v }));
 
+  const defaultFilter = platList.length ? platList[0].key : null;
+  if (!state.hotFilter && defaultFilter) {
+    state.hotFilter = defaultFilter;
+    localStorage.setItem('toutiao_hotFilter', defaultFilter);
+  }
+
   renderSubTabs(platList, state.hotFilter, (key) => {
     state.hotFilter = key;
-    localStorage.setItem('toutiao_hotFilter', key || '');
+    localStorage.setItem('toutiao_hotFilter', key);
     const list = $('#trendingList');
     if (list) list.innerHTML = '';
     if (state.hotObserver) { state.hotObserver.disconnect(); state.hotObserver = null; }
@@ -678,7 +685,7 @@ function renderHotTab() {
     }, { rootMargin: '300px' });
     const sentinel = $('#hotSentinel');
     if (sentinel) state.hotObserver.observe(sentinel);
-  });
+  }, false);
 
   renderErrorBanner();
 
