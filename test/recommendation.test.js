@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { rerankCandidates, scoreCandidate } = require('../public/app');
+const { rerankCandidates, rerankDuplicateEvents, isSameEvent, scoreCandidate } = require('../public/app');
 
 test('rerankCandidates limits same-source items in top 10 and avoids adjacent duplicates when alternatives exist', () => {
   const items = [
@@ -30,6 +30,73 @@ test('rerankCandidates limits same-source items in top 10 and avoids adjacent du
   for (let i = 1; i < top10.length; i++) {
     assert.notEqual(top10[i].source, top10[i - 1].source);
   }
+});
+
+test('isSameEvent matches similar cross-platform titles in same 24-hour window', () => {
+  const a = {
+    id: 'weibo_1',
+    title: '苹果发布新款 AI 芯片，性能大幅提升',
+    timestamp: new Date('2026-05-20T09:00:00Z').getTime()
+  };
+  const b = {
+    id: 'toutiao_1',
+    title: '苹果新 AI 芯片发布 性能提升明显',
+    timestamp: new Date('2026-05-20T18:00:00Z').getTime()
+  };
+
+  assert.equal(isSameEvent(a, b), true);
+});
+
+test('isSameEvent does not match shared generic words across different time windows', () => {
+  const a = {
+    id: 'rss_1',
+    title: '苹果发布 AI 芯片计划',
+    timestamp: new Date('2026-05-20T09:00:00Z').getTime()
+  };
+  const b = {
+    id: 'rss_2',
+    title: '苹果发布 AI 开发者工具',
+    timestamp: new Date('2026-05-22T09:00:00Z').getTime()
+  };
+
+  assert.equal(isSameEvent(a, b), false);
+});
+
+test('rerankDuplicateEvents spreads duplicate event items outside a 5-item window', () => {
+  const baseTime = new Date('2026-05-20T09:00:00Z').getTime();
+  const items = [
+    { id: 'd1', title: '苹果发布新款 AI 芯片 性能大幅提升', source: '微博', score: 100, timestamp: baseTime },
+    { id: 'd2', title: '苹果新 AI 芯片发布 性能提升明显', source: '头条', score: 99, timestamp: baseTime + 1000 },
+    { id: 'd3', title: '苹果 AI 芯片正式发布 性能升级', source: '知乎', score: 98, timestamp: baseTime + 2000 },
+    { id: 'n1', title: 'OpenAI 发布新模型', source: 'IT之家', score: 97, timestamp: baseTime + 3000 },
+    { id: 'n2', title: '新能源汽车销量增长', source: '36氪', score: 96, timestamp: baseTime + 4000 },
+    { id: 'n3', title: '央行发布利率政策', source: '财新', score: 95, timestamp: baseTime + 5000 },
+    { id: 'n4', title: '火星探测任务完成', source: '央视', score: 94, timestamp: baseTime + 6000 },
+    { id: 'n5', title: '本地文旅消费升温', source: '澎湃', score: 93, timestamp: baseTime + 7000 },
+    { id: 'd4', title: '苹果新款 AI 芯片性能提升', source: '百度', score: 92, timestamp: baseTime + 8000 }
+  ];
+
+  const result = rerankDuplicateEvents(items);
+
+  assert.deepEqual(result.map(item => item.id).slice(0, 6), ['d1', 'n1', 'n2', 'n3', 'n4', 'n5']);
+  assert.equal(result.length, items.length);
+  assert.equal(new Set(result.map(item => item.id)).size, items.length);
+  assert.ok(result.findIndex(item => item.id === 'd2') > 5);
+  assert.ok(result.findIndex(item => item.id === 'd3') > 5);
+});
+
+test('rerankDuplicateEvents keeps duplicate items when alternatives are exhausted', () => {
+  const baseTime = new Date('2026-05-20T09:00:00Z').getTime();
+  const items = [
+    { id: 'd1', title: '苹果发布新款 AI 芯片 性能大幅提升', source: '微博', score: 100, timestamp: baseTime },
+    { id: 'd2', title: '苹果新 AI 芯片发布 性能提升明显', source: '头条', score: 99, timestamp: baseTime + 1000 },
+    { id: 'd3', title: '苹果 AI 芯片正式发布 性能升级', source: '知乎', score: 98, timestamp: baseTime + 2000 }
+  ];
+
+  const result = rerankDuplicateEvents(items);
+
+  assert.deepEqual(result.map(item => item.id), ['d1', 'd2', 'd3']);
+  assert.equal(result.length, items.length);
 });
 
 test('scoreCandidate keeps strong-interest rss above generic hot item', () => {

@@ -309,6 +309,75 @@ function toggleTheme() {
 
 // ── Hybrid scoring ──
 
+const EVENT_STOP_WORDS = new Set([
+  '一个', '一位', '相关', '最新', '正式', '宣布', '回应', '网友', '话题', '冲上', '热搜',
+  '什么', '为何', '如何', '已经', '再次', '进行', '发布会', '消息', '视频', '全文'
+]);
+
+function normalizeEventTitle(title) {
+  return String(title || '')
+    .toLowerCase()
+    .replace(/[｜|].*$/g, '')
+    .replace(/[-_—].*(微博|头条|知乎|百度|热搜|新闻).*$/g, '')
+    .replace(/[\s\p{P}\p{S}]+/gu, '');
+}
+
+function extractEventKeywords(title) {
+  const normalized = normalizeEventTitle(title);
+  const matches = normalized.match(/[\p{Script=Han}A-Za-z0-9]{2,}/gu) || [];
+  const keywords = [];
+
+  for (const word of matches) {
+    if (/^\d+$/.test(word)) continue;
+    if (word.length < 2) continue;
+    if (EVENT_STOP_WORDS.has(word)) continue;
+    if (!keywords.includes(word)) keywords.push(word);
+    if (keywords.length >= 6) break;
+  }
+
+  for (const kws of Object.values(TOPIC_KEYWORDS)) {
+    for (const kw of kws) {
+      if (normalized.includes(kw.toLowerCase()) && !keywords.includes(kw)) {
+        keywords.push(kw);
+        if (keywords.length >= 6) return keywords;
+      }
+    }
+  }
+
+  return keywords;
+}
+
+function getEventWindow(item) {
+  if (!item || !Number.isFinite(item.timestamp)) return null;
+  return Math.floor(item.timestamp / 86400000);
+}
+
+function getOverlapCount(a, b) {
+  const bSet = new Set(b);
+  return a.filter(word => bSet.has(word)).length;
+}
+
+function isSameEvent(a, b) {
+  const titleA = normalizeEventTitle(a && a.title);
+  const titleB = normalizeEventTitle(b && b.title);
+  if (!titleA || !titleB) return false;
+
+  const windowA = getEventWindow(a);
+  const windowB = getEventWindow(b);
+  if (windowA !== null && windowB !== null && windowA !== windowB) return false;
+
+  if (titleA.includes(titleB) || titleB.includes(titleA)) {
+    return Math.min(titleA.length, titleB.length) >= 8;
+  }
+
+  const keywordsA = extractEventKeywords(titleA);
+  const keywordsB = extractEventKeywords(titleB);
+  const overlap = getOverlapCount(keywordsA, keywordsB);
+  const minSize = Math.min(keywordsA.length, keywordsB.length);
+
+  return overlap >= 2 && minSize >= 2;
+}
+
 function getReadPenalty(item, history) {
   return history.some(h => h.url && item.url && h.url === item.url)
     || history.some(h => h.title === item.title)
@@ -381,6 +450,33 @@ function rerankCandidates(items) {
     const [picked] = remaining.splice(pickIndex, 1);
     ranked.push(picked);
     sourceQuota.set(picked.source, (sourceQuota.get(picked.source) || 0) + 1);
+  }
+
+  return ranked;
+}
+
+function rerankDuplicateEvents(items, windowSize = 5) {
+  const remaining = items.slice();
+  const ranked = [];
+
+  while (remaining.length) {
+    let pickIndex = -1;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const item = remaining[i];
+      const recent = ranked.slice(Math.max(0, ranked.length - windowSize));
+      const duplicatesRecent = recent.some(selected => isSameEvent(selected, item));
+
+      if (!duplicatesRecent) {
+        pickIndex = i;
+        break;
+      }
+    }
+
+    if (pickIndex === -1) pickIndex = 0;
+
+    const [picked] = remaining.splice(pickIndex, 1);
+    ranked.push(picked);
   }
 
   return ranked;
@@ -481,7 +577,7 @@ function buildHybridFeed() {
   }
   scored.sort((a, b) => b.score - a.score);
 
-  const ranked = rerankCandidates(scored);
+  const ranked = rerankDuplicateEvents(rerankCandidates(scored));
   const topIds = ranked.slice(0, 30).map(i => i.id);
   shownIds.push(...topIds);
   sessionStorage.setItem('toutiao_shown', JSON.stringify(shownIds));
@@ -1257,7 +1353,11 @@ if (typeof document !== 'undefined' && typeof window !== 'undefined') {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    normalizeEventTitle,
+    extractEventKeywords,
+    isSameEvent,
     rerankCandidates,
+    rerankDuplicateEvents,
     scoreCandidate
   };
 }
