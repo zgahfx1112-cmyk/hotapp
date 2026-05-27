@@ -255,7 +255,7 @@ PLATFORMS = {
         "url": "https://weibo.com/ajax/side/hotSearch",
         "hdrs": {"User-Agent": UA, "Referer": "https://weibo.com/", "X-Requested-With": "XMLHttpRequest"},
         "parse": parse_weibo},
-        "baidu": {"name": "百度",
+    "baidu": {"name": "百度",
         "url": "https://top.baidu.com/board?tab=realtime",
         "hdrs": {"User-Agent": UA},
         "parse": parse_baidu},

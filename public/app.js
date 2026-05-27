@@ -705,7 +705,7 @@ function loadFeedPage() {
     ];
     batch.forEach((item, i) => {
       const g = gradients[(start + i) % gradients.length];
-      const SOURCE_ICONS = { '头条':'📰','微博':'🔥','百度':'🔍','知乎':'💡','虎扑':'🏀','IT之家':'💻','36氪':'💰','虎嗅':'📊','少数派':'⚡','GitHub':'🐙','V2EX':'💬' };
+      const SOURCE_ICONS = { '头条':'📰','微博':'🔥','百度':'🔍','知乎':'💡','虎扑':'🏀','IT之家':'💻','36氪':'💰','虎嗅':'📊','少数派':'⚡','贴吧':'💬','GitHub':'🐙','V2EX':'💬' };
       const icon = SOURCE_ICONS[item.source] || (item.type === 'hot' ? '🔥' : '📝');
       const imgHtml = item.image
         ? `<div class="feed-img-wrap"><img src="${escapeHtml(item.image)}" alt="" loading="lazy" onerror="this.style.opacity='0';this.parentElement.querySelector('.fallback').style.display='flex'"><div class="fallback" style="background:${g};display:none">${icon}</div></div>`
@@ -752,9 +752,10 @@ function loadFeedPage() {
 function renderHotTab() {
   const area = $('#contentArea');
 
+  const HIDDEN_PLATFORMS = ['hupu', 'ithome', 'sspai', 'tieba'];
   const platforms = {};
   for (const item of state.hotItems) {
-    if (!platforms[item.platform]) platforms[item.platform] = getPlatformName(item.platform);
+    if (!platforms[item.platform] && !HIDDEN_PLATFORMS.includes(item.platform)) platforms[item.platform] = getPlatformName(item.platform);
   }
   const platList = Object.entries(platforms).map(([k, v]) => ({ key: k, label: v }));
 
