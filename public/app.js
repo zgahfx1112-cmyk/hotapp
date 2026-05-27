@@ -894,7 +894,8 @@ function renderHotList() {
 function renderRssTab() {
   const area = $('#contentArea');
 
-  const sourceList = state.sources.map(s => ({ key: String(s.id), label: s.name }));
+  const HIDDEN_RSS = ['钛媒体', 'InfoQ', 'SegmentFault', 'Solidot', 'OSCHINA'];
+  const sourceList = state.sources.filter(s => !HIDDEN_RSS.includes(s.name)).map(s => ({ key: String(s.id), label: s.name }));
   renderSubTabs(sourceList, state.rssFilter, (key) => {
     state.rssFilter = key;
     localStorage.setItem('toutiao_rssFilter', key || '');
