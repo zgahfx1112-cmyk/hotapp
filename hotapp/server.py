@@ -31,20 +31,6 @@ def parse_weibo(data):
              "heatScore": x.get("num") or x.get("raw_hot") or (9000-i*200),
              "image": x.get("icon") or None} for i,x in enumerate(items[:100])]  # 增加到100条
 
-def parse_douyin(data):
-    items = (data.get("data", {}) or {}).get("trending_list") or []
-    result = []
-    for i, x in enumerate(items[:100]):  # 增加到100条
-        cover = x.get("word_cover") or {}
-        urls = cover.get("url_list") or []
-        img = urls[0] if urls else None
-        result.append({"id": f"douyin_{x.get('group_id',i)}", "title": x.get("word",""),
-                 "url": f"https://www.douyin.com/search/{urllib.parse.quote(x.get('word',''))}",
-                 "platform": "douyin", "rank": i+1,
-                 "heatScore": x.get("hot_value") or (9500-i*150),
-                 "event_time": x.get("event_time", 0),
-                 "image": img})
-    return result
 
 def parse_baidu(raw):
     m = re.search(r"<!--s-data:(.*?)-->", raw, re.DOTALL)
@@ -269,11 +255,7 @@ PLATFORMS = {
         "url": "https://weibo.com/ajax/side/hotSearch",
         "hdrs": {"User-Agent": UA, "Referer": "https://weibo.com/", "X-Requested-With": "XMLHttpRequest"},
         "parse": parse_weibo},
-    "douyin": {"name": "抖音",
-        "url": "https://www.douyin.com/aweme/v1/web/hot/search/list/?detail_list=1&count=100",
-        "hdrs": {"User-Agent": UA, "Referer": "https://www.douyin.com/"},
-        "parse": parse_douyin},
-    "baidu": {"name": "百度",
+        "baidu": {"name": "百度",
         "url": "https://top.baidu.com/board?tab=realtime",
         "hdrs": {"User-Agent": UA},
         "parse": parse_baidu},
@@ -339,6 +321,10 @@ def fetch_one(key, cfg):
         print(f"  [{cfg['name']}] 失败: {e}")
         return []
 
+def title_key(title):
+    return re.sub(r"\s+", "", str(title or "")).lower()
+
+
 def fetch_all_platforms():
     """抓取所有平台数据"""
     all_items, errors = [], []
@@ -359,7 +345,13 @@ def fetch_all_platforms():
 
     # 轮询交错排序
     groups = defaultdict(list)
+    seen_titles = set()
     for item in all_items:
+        key = title_key(item.get("title"))
+        if key and key in seen_titles:
+            continue
+        if key:
+            seen_titles.add(key)
         groups[item["platform"]].append(item)
     for items in groups.values():
         items.sort(key=lambda x: x["rank"])

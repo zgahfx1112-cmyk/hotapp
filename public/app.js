@@ -1205,7 +1205,7 @@ function setupTabs() {
 // ── Helpers ──
 
 function getPlatformName(key) {
-  const map = { weibo: '微博', douyin: '抖音', baidu: '百度', toutiao: '头条', tieba: '贴吧', sspai: '少数派', ithome: 'IT之家', '36kr': '36氪', zhihu: '知乎', hupu: '虎扑' };
+  const map = { weibo: '微博', baidu: '百度', toutiao: '头条', tieba: '贴吧', sspai: '少数派', ithome: 'IT之家', '36kr': '36氪', zhihu: '知乎', hupu: '虎扑' };
   return map[key] || key;
 }
 
