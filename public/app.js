@@ -12,6 +12,7 @@ const state = {
   hotFilter: null,
   loading: false,
   error: null,
+  initialLoad: true,
   recommender: new Recommender(),
   feedItems: [],
   feedPage: 0,
@@ -67,16 +68,25 @@ async function init() {
     loadArticles: (limit) => loadArticles(limit),
     loadHotData,
     loadStats,
+    removeSkeleton() {
+      const skeleton = document.getElementById('skeletonLoader');
+      if (skeleton) {
+        skeleton.classList.add('fade-out');
+        setTimeout(() => skeleton.remove(), 300);
+      }
+    },
     afterSourcesLoaded() {
       if (state.currentTab === 'rss') renderTab();
     },
     afterArticlesLoaded() {
+      state.initialLoad = false;
       state.feedItems = [];
       state.feedPage = 0;
       state.feedExhausted = false;
       if (state.currentTab === 'recommend' || state.currentTab === 'rss') renderTab();
     },
     afterHotLoaded() {
+      state.initialLoad = false;
       state.feedItems = [];
       state.feedPage = 0;
       state.feedExhausted = false;
@@ -637,6 +647,12 @@ function renderSubTabs(items, activeKey, onClick, showAll = true) {
 function renderRecommendTab() {
   const area = $('#contentArea');
 
+  // 首次加载：保留骨架屏，在骨架屏后渲染兴趣标签
+  if (state.initialLoad && $('#skeletonLoader')) {
+    renderInterestTags();
+    return;
+  }
+
   const digestHtml = renderDailyDigest();
   renderInterestTags();
 
@@ -716,6 +732,7 @@ function loadFeedPage() {
         : `<div class="feed-img-wrap"><div class="fallback" style="background:${g};display:flex">${icon}</div></div>`;
       const card = document.createElement('div');
       card.className = 'feed-card';
+      card.classList.add('fade-in');
       const starred = isBookmarked(item.id);
       card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, hide: true })}`;
       card.addEventListener('click', (e) => {
@@ -752,7 +769,7 @@ function loadFeedPage() {
     state.feedPage++;
     state.feedLoading = false;
     $('#feedLoading').style.display = 'none';
-  }, 200);
+  }, state.initialLoad ? 0 : 200);
 }
 
 function renderHotTab() {

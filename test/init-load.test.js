@@ -22,7 +22,8 @@ test('createInitController renders immediately before async article loader finis
     afterSourcesLoaded: () => calls.push('afterSourcesLoaded'),
     afterArticlesLoaded: () => calls.push('afterArticlesLoaded'),
     afterHotLoaded: () => calls.push('afterHotLoaded'),
-    afterStatsLoaded: () => calls.push('afterStatsLoaded')
+    afterStatsLoaded: () => calls.push('afterStatsLoaded'),
+    removeSkeleton: () => calls.push('removeSkeleton')
   });
 
   const pending = controller.init();
@@ -36,4 +37,75 @@ test('createInitController renders immediately before async article loader finis
 
   assert.equal(calls.includes('afterArticlesLoaded'), true);
   assert.equal(calls.includes('afterHotLoaded'), true);
+});
+
+test('removeSkeleton is called after data loads', async () => {
+  const calls = [];
+  let releaseArticles;
+  const articlesDone = new Promise(resolve => { releaseArticles = resolve; });
+
+  const controller = createInitController({
+    restorePrefs: () => {},
+    initTheme: () => {},
+    renderTab: () => calls.push('renderTab'),
+    renderInterestTags: () => {},
+    setupTabs: () => {},
+    registerSW: () => {},
+    getUserStats: () => {},
+    loadSources: async () => {},
+    loadArticles: async () => { await articlesDone; },
+    loadHotData: async () => {},
+    loadStats: async () => {},
+    afterSourcesLoaded: () => {},
+    afterArticlesLoaded: () => calls.push('afterArticlesLoaded'),
+    afterHotLoaded: () => calls.push('afterHotLoaded'),
+    afterStatsLoaded: () => {},
+    removeSkeleton: () => calls.push('removeSkeleton')
+  });
+
+  const pending = controller.init();
+
+  // Skeleton still present while data loading
+  assert.equal(calls.includes('removeSkeleton'), false);
+
+  releaseArticles();
+  await pending;
+
+  // Skeleton removed after data loaded
+  assert.equal(calls.includes('removeSkeleton'), true);
+});
+
+test('skeleton not removed while articles still loading', async () => {
+  const calls = [];
+  let releaseArticles;
+  const articlesDone = new Promise(resolve => { releaseArticles = resolve; });
+
+  const controller = createInitController({
+    restorePrefs: () => {},
+    initTheme: () => {},
+    renderTab: () => calls.push('renderTab'),
+    renderInterestTags: () => {},
+    setupTabs: () => {},
+    registerSW: () => {},
+    getUserStats: () => {},
+    loadSources: async () => {},
+    loadArticles: async () => { await articlesDone; },
+    loadHotData: async () => {},
+    loadStats: async () => {},
+    afterSourcesLoaded: () => {},
+    afterArticlesLoaded: () => calls.push('afterArticlesLoaded'),
+    afterHotLoaded: () => {},
+    afterStatsLoaded: () => {},
+    removeSkeleton: () => calls.push('removeSkeleton')
+  });
+
+  const pending = controller.init();
+
+  // renderTab called immediately, skeleton still showing
+  assert.equal(calls.includes('renderTab'), true);
+  assert.equal(calls.includes('removeSkeleton'), false);
+  assert.equal(calls.includes('afterArticlesLoaded'), false);
+
+  releaseArticles();
+  await pending;
 });

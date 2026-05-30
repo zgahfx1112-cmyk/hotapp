@@ -8,10 +8,18 @@ function createInitController(deps) {
       deps.setupTabs();
       deps.registerSW();
 
+      let skeletonRemoved = false;
+      function tryRemoveSkeleton() {
+        if (!skeletonRemoved && deps.removeSkeleton) {
+          skeletonRemoved = true;
+          deps.removeSkeleton();
+        }
+      }
+
       const jobs = [
         deps.loadSources().then(() => deps.afterSourcesLoaded && deps.afterSourcesLoaded()),
-        deps.loadArticles(30).then(() => deps.afterArticlesLoaded && deps.afterArticlesLoaded()),
-        deps.loadHotData().then(() => deps.afterHotLoaded && deps.afterHotLoaded()),
+        deps.loadArticles(30).then(() => { tryRemoveSkeleton(); deps.afterArticlesLoaded && deps.afterArticlesLoaded(); }),
+        deps.loadHotData().then(() => { tryRemoveSkeleton(); deps.afterHotLoaded && deps.afterHotLoaded(); }),
         deps.loadStats().then(() => deps.afterStatsLoaded && deps.afterStatsLoaded())
       ];
 
