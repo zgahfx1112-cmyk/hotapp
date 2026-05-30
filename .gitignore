@@ -3,3 +3,5 @@ node_modules/
 hotapp/__pycache__/
 hotapp/cache.json
 .hotapp_cache
+.claude/
+.codegraph/
