@@ -35,9 +35,13 @@ const ICON_SHARE = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" 
 const ICON_STAR_FILLED = '<svg viewBox="0 0 24 24" width="16" height="16" fill="#f0a030" stroke="#f0a030" stroke-width="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>';
 const ICON_STAR_EMPTY = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>';
 const ICON_HIDE = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+const ICON_CLOCK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+const ICON_CLOCK_FILLED = '<svg viewBox="0 0 24 24" width="16" height="16" fill="#4f6ef6" stroke="#4f6ef6" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14" stroke="#fff"/></svg>';
 
 function starIcon(starred) { return starred ? ICON_STAR_FILLED : ICON_STAR_EMPTY; }
 function starLabel(starred) { return starred ? '已收藏' : '收藏'; }
+function clockIcon(saved) { return saved ? ICON_CLOCK_FILLED : ICON_CLOCK; }
+function clockLabel(saved) { return saved ? '已添加' : '稍后读'; }
 
 function buildCardActions(config) {
   const btns = [];
@@ -45,6 +49,10 @@ function buildCardActions(config) {
   if (config.bookmark) {
     const s = config.bookmark.starred;
     btns.push(`<button class="card-action-btn ${s ? 'active' : ''}" data-action="bookmark" title="收藏">${starIcon(s)}<span>${starLabel(s)}</span></button>`);
+  }
+  if (config.readLater) {
+    const saved = isReadLater(config.readLater.id);
+    btns.push(`<button class="card-action-btn ${saved ? 'active' : ''}" data-action="readlater" title="稍后读">${clockIcon(saved)}<span>${clockLabel(saved)}</span></button>`);
   }
   if (config.hide) btns.push(`<button class="card-action-btn card-action-muted" data-action="hide" title="不感兴趣">${ICON_HIDE}<span>不感兴趣</span></button>`);
   return `<div class="card-actions">${btns.join('')}</div>`;
@@ -199,11 +207,66 @@ Recommender.prototype.recordView = function(item) {
   this.history.push({ title: item.title, url: item.url || '', keywords, type: item.type, timestamp: Date.now() });
   if (this.history.length > 200) this.history = this.history.slice(-200);
   localStorage.setItem('toutiao_history', JSON.stringify(this.history));
+  // Update implicit interests after each view
+  this.updateImplicitInterests();
+  // Update reading stats for achievements
+  this.updateReadingStats();
+};
+
+Recommender.prototype.updateReadingStats = function() {
+  if (typeof updateReadingStats === 'undefined') return; // Guard for test environment
+
+  const today = new Date().toISOString().split('T')[0];
+  const storedStats = localStorage.getItem('toutiao_readingStats');
+  const stats = storedStats ? JSON.parse(storedStats) : { streak: 0, count: 0, lastRead: null };
+
+  const updated = updateReadingStats(stats, today);
+  localStorage.setItem('toutiao_readingStats', JSON.stringify(updated));
+
+  // Check for new milestones
+  const totalArticles = this.history.length;
+  const badges = checkMilestones(totalArticles);
+  const prevBadges = JSON.parse(localStorage.getItem('toutiao_badges') || '[]');
+
+  const newBadges = badges.filter(b => !prevBadges.includes(b));
+  if (newBadges.length > 0) {
+    localStorage.setItem('toutiao_badges', JSON.stringify(badges));
+    // Show achievement notification
+    const badgeNames = { bronze: '铜牌', silver: '银牌', gold: '金牌' };
+    newBadges.forEach(badge => {
+      if (typeof showToast === 'function') {
+        showToast(`🏆 恭喜获得${badgeNames[badge]}阅读达人徽章！`);
+      }
+    });
+  }
+};
+
+Recommender.prototype.getReadingStats = function() {
+  if (typeof updateReadingStats === 'undefined') return { streak: 0, count: 0 };
+
+  const storedStats = localStorage.getItem('toutiao_readingStats');
+  const stats = storedStats ? JSON.parse(storedStats) : { streak: 0, count: 0, lastRead: null };
+  const badges = JSON.parse(localStorage.getItem('toutiao_badges') || '[]');
+
+  return {
+    ...stats,
+    totalArticles: this.history.length,
+    badges
+  };
 };
 Recommender.prototype.getBehaviorWeights = function() {
-  const w = {};
-  for (const h of this.history) { for (const kw of h.keywords) { w[kw] = (w[kw] || 0) + 1; } }
-  return w;
+  return getDecayedBehaviorWeights(this.history, Date.now());
+};
+
+Recommender.prototype.updateImplicitInterests = function() {
+  const implicit = computeImplicitInterests(this.history);
+  // Merge implicit interests with manual interests (no duplicates)
+  const manual = this.interests;
+  const merged = [...new Set([...manual, ...implicit])];
+  if (JSON.stringify(merged) !== JSON.stringify(this.interests)) {
+    this.interests = merged;
+    this.saveInterests();
+  }
 };
 
 function extractKeywords(text) {
@@ -216,22 +279,545 @@ function extractKeywords(text) {
   return words;
 }
 
+function computeImplicitInterests(history) {
+  const now = Date.now();
+  const topicScores = {};
+
+  // Count keyword matches per topic with time decay
+  for (const h of history) {
+    const ageDays = (now - h.timestamp) / 86400000;
+    if (ageDays > 30) continue; // Ignore items older than 30 days
+
+    const decay = Math.exp(-ageDays / 14); // 14-day half-life
+
+    for (const [topic, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+      let matchCount = 0;
+      for (const kw of keywords) {
+        if (h.keywords.includes(kw)) matchCount++;
+      }
+      if (matchCount > 0) {
+        topicScores[topic] = (topicScores[topic] || 0) + matchCount * decay;
+      }
+    }
+  }
+
+  // Return topics with score >= 3 (threshold for auto-discovery)
+  return Object.entries(topicScores)
+    .filter(([_, score]) => score >= 3)
+    .sort((a, b) => b[1] - a[1])
+    .map(([topic, _]) => topic);
+}
+
+function getDecayedBehaviorWeights(history, now) {
+  const weights = {};
+  const currentTime = now || Date.now();
+
+  for (const h of history) {
+    const ageDays = (currentTime - h.timestamp) / 86400000;
+    if (ageDays > 30) continue; // Ignore items older than 30 days
+
+    const decay = Math.exp(-ageDays / 7); // 7-day half-life for behavior weights
+
+    for (const kw of h.keywords) {
+      weights[kw] = (weights[kw] || 0) + decay;
+    }
+  }
+
+  return weights;
+}
+
+// ── Unread Tracking ──
+
+function isArticleRead(article, history) {
+  if (!article || !history || history.length === 0) return false;
+
+  return history.some(h => {
+    // Match by URL if both have URLs
+    if (article.url && h.url && article.url === h.url) return true;
+    // Match by title
+    if (article.title && h.title && article.title === h.title) return true;
+    return false;
+  });
+}
+
+function getUnreadCount(articles, history) {
+  if (!articles || articles.length === 0) return 0;
+
+  const unreadCount = articles.filter(article => !isArticleRead(article, history)).length;
+  return unreadCount;
+}
+
+// ── Read Later ──
+
+function getReadLaterList() {
+  const raw = localStorage.getItem('toutiao_readLater');
+  return raw ? JSON.parse(raw) : [];
+}
+
+function isReadLater(id) {
+  const list = getReadLaterList();
+  return list.some(item => item.id === id);
+}
+
+function toggleReadLater(article) {
+  const list = getReadLaterList();
+  const index = list.findIndex(item => item.id === article.id);
+
+  if (index >= 0) {
+    // Remove from list
+    list.splice(index, 1);
+  } else {
+    // Add to list (newer first)
+    list.unshift({
+      id: article.id,
+      title: article.title,
+      url: article.url || article.link,
+      source: article.source,
+      type: article.type,
+      image: article.image || article.image_url,
+      timestamp: Date.now()
+    });
+  }
+
+  localStorage.setItem('toutiao_readLater', JSON.stringify(list));
+  return index < 0; // Return true if added, false if removed
+}
+
+// ── In-App Reader ──
+
+let readerFontSize = 'md';
+try { readerFontSize = localStorage.getItem('toutiao_readerFont') || 'md'; } catch {}
+
+async function openReader(article) {
+  const overlay = document.createElement('div');
+  overlay.className = 'reader-overlay';
+  overlay.innerHTML = `<div class="reader-modal">
+    <div class="reader-header">
+      <div class="reader-header-left">
+        <span class="reader-source">${escapeHtml(article.source || '未知来源')}</span>
+        <span class="reader-time">${article.pub_date ? formatTime(article.pub_date) : ''}</span>
+      </div>
+      <button class="reader-close" title="关闭">×</button>
+    </div>
+    <div class="reader-toolbar">
+      <button class="reader-tool-btn ${readerFontSize === 'sm' ? 'active' : ''}" data-font="sm">小字</button>
+      <button class="reader-tool-btn ${readerFontSize === 'md' ? 'active' : ''}" data-font="md">中字</button>
+      <button class="reader-tool-btn ${readerFontSize === 'lg' ? 'active' : ''}" data-font="lg">大字</button>
+      <span class="spacer"></span>
+    </div>
+    <div class="reader-body">
+      <h1 class="reader-title">${escapeHtml(article.title || '')}</h1>
+      <div class="reader-loading">
+        <div class="spinner"></div>
+        <p>正在加载全文...</p>
+      </div>
+    </div>
+    <div class="reader-footer">
+      <button class="reader-footer-btn" data-action="bookmark">${isBookmarked(article.id) ? '⭐ 已收藏' : '☆ 收藏'}</button>
+      <button class="reader-footer-btn" data-action="share">📤 分享</button>
+      <span class="spacer"></span>
+      <button class="reader-footer-btn primary" data-action="original">🔗 原文打开</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
+
+  // Close handlers
+  const close = () => {
+    overlay.remove();
+    document.body.style.overflow = '';
+  };
+  overlay.querySelector('.reader-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+
+  // Font size controls
+  overlay.querySelectorAll('.reader-tool-btn[data-font]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      readerFontSize = btn.dataset.font;
+      localStorage.setItem('toutiao_readerFont', readerFontSize);
+      overlay.querySelectorAll('.reader-tool-btn[data-font]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const content = overlay.querySelector('.reader-content');
+      if (content) {
+        content.classList.remove('font-sm', 'font-md', 'font-lg');
+        content.classList.add('font-' + readerFontSize);
+      }
+    });
+  });
+
+  // Footer actions
+  overlay.querySelector('[data-action="bookmark"]').addEventListener('click', (e) => {
+    toggleBookmark(article);
+    const nowStarred = isBookmarked(article.id);
+    e.currentTarget.textContent = nowStarred ? '⭐ 已收藏' : '☆ 收藏';
+  });
+
+  overlay.querySelector('[data-action="share"]').addEventListener('click', () => {
+    shareItem({ title: article.title, url: article.url || article.link, source: article.source });
+  });
+
+  overlay.querySelector('[data-action="original"]').addEventListener('click', () => {
+    if (article.url || article.link) window.open(article.url || article.link, '_blank');
+  });
+
+  // Fetch content
+  const body = overlay.querySelector('.reader-body');
+  const titleEl = body.querySelector('.reader-title');
+
+  try {
+    const url = article.url || article.link;
+    const res = await fetch(`/api/reader?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(15000) });
+    const data = await res.json();
+
+    if (data.error) {
+      body.innerHTML = `<h1 class="reader-title">${escapeHtml(article.title || '')}</h1>
+        <div class="reader-error">
+          <p>😔 全文加载失败</p>
+          <p style="font-size:13px;margin-top:8px">${escapeHtml(article.summary || '暂无摘要')}</p>
+          <button class="btn-open-original" onclick="window.open('${escapeHtml(url || '#')}','_blank')">🔗 打开原文阅读</button>
+        </div>`;
+      return;
+    }
+
+    if (data.title) titleEl.textContent = data.title;
+
+    // Sanitize and render content
+    const contentHtml = sanitizeReaderContent(data.content || '');
+    body.innerHTML = `<h1 class="reader-title">${escapeHtml(data.title || article.title || '')}</h1>
+      <div class="reader-content font-${readerFontSize}">${contentHtml}</div>`;
+
+    // Image error handling
+    body.querySelectorAll('.reader-content img').forEach(img => {
+      img.addEventListener('error', () => {
+        img.style.display = 'none';
+      });
+    });
+  } catch (e) {
+    body.innerHTML = `<h1 class="reader-title">${escapeHtml(article.title || '')}</h1>
+      <div class="reader-error">
+        <p>😔 网络请求失败</p>
+        <p style="font-size:13px;margin-top:8px">${escapeHtml(article.summary || '暂无摘要')}</p>
+        <button class="btn-open-original" onclick="window.open('${escapeHtml(article.url || article.link || '#')}','_blank')">🔗 打开原文阅读</button>
+      </div>`;
+  }
+}
+
+function sanitizeReaderContent(html) {
+  // Basic sanitization - remove dangerous tags but keep formatting
+  let clean = html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
+    .replace(/<embed[^>]*>/gi, '')
+    .replace(/on\w+="[^"]*"/gi, '')
+    .replace(/on\w+='[^']*'/gi, '')
+    .replace(/javascript:/gi, '');
+  return clean;
+}
+
 // ── Share ──
+
+// ── Share Card Generation ──
+
+function generateShareCard(item) {
+  const { title, source, summary, image, url } = item;
+
+  // Escape HTML to prevent XSS
+  const escapeHtml = (str) => {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  // Truncate summary to ~100 characters
+  const truncatedSummary = summary
+    ? (summary.length > 100 ? summary.substring(0, 97) + '...' : summary)
+    : '';
+
+  let html = '<div class="share-card">';
+  html += '<div class="share-header">';
+  html += `<div class="share-source">${escapeHtml(source || '今日热榜')}</div>`;
+  html += '</div>';
+
+  if (image) {
+    html += `<div class="share-image"><img src="${escapeHtml(image)}" alt="" /></div>`;
+  }
+
+  html += '<div class="share-body">';
+  html += `<h3 class="share-title">${escapeHtml(title)}</h3>`;
+
+  if (truncatedSummary) {
+    html += `<p class="share-summary">${escapeHtml(truncatedSummary)}</p>`;
+  }
+
+  html += '</div>';
+
+  html += '<div class="share-footer">';
+  html += '<div class="qr-code"></div>';
+  html += '<div class="share-text">扫码查看详情</div>';
+  html += '</div>';
+
+  html += '</div>';
+
+  return html;
+}
+
+function generateQRCode(url) {
+  // Simple QR code generator using SVG
+  // This is a simplified version - in production, you'd use a library like qrcode.js
+
+  const size = 120;
+  const modules = 25; // QR code size in modules
+  const moduleSize = size / modules;
+
+  // Generate a simple pattern based on the URL
+  // In production, this would be a proper QR encoding algorithm
+  let svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">`;
+
+  // White background
+  svg += `<rect width="${size}" height="${size}" fill="white"/>`;
+
+  // Generate QR pattern (simplified - just creates a pattern based on URL hash)
+  const hash = Array.from(url || '').reduce((acc, char) => {
+    return ((acc << 5) - acc) + char.charCodeAt(0);
+  }, 0);
+
+  // Draw finder patterns (the three squares in corners)
+  const drawFinderPattern = (x, y) => {
+    // Outer square
+    svg += `<rect x="${x}" y="${y}" width="${moduleSize * 7}" height="${moduleSize * 7}" fill="black"/>`;
+    // Inner white square
+    svg += `<rect x="${x + moduleSize}" y="${y + moduleSize}" width="${moduleSize * 5}" height="${moduleSize * 5}" fill="white"/>`;
+    // Inner black square
+    svg += `<rect x="${x + moduleSize * 2}" y="${y + moduleSize * 2}" width="${moduleSize * 3}" height="${moduleSize * 3}" fill="black"/>`;
+  };
+
+  drawFinderPattern(0, 0);
+  drawFinderPattern(size - moduleSize * 7, 0);
+  drawFinderPattern(0, size - moduleSize * 7);
+
+  // Generate data modules based on URL hash
+  for (let row = 0; row < modules; row++) {
+    for (let col = 0; col < modules; col++) {
+      // Skip finder patterns
+      if ((row < 8 && col < 8) || (row < 8 && col > modules - 9) || (row > modules - 9 && col < 8)) {
+        continue;
+      }
+
+      // Pseudo-random pattern based on hash
+      const bit = ((hash + row * 31 + col * 17) >> ((row + col) % 8)) & 1;
+      if (bit) {
+        svg += `<rect x="${col * moduleSize}" y="${row * moduleSize}" width="${moduleSize}" height="${moduleSize}" fill="black"/>`;
+      }
+    }
+  }
+
+  svg += '</svg>';
+  return svg;
+}
 
 async function shareItem(item) {
   const url = item.url || window.location.href;
   const shortUrl = await getShortLink(item, url);
-  const shareData = {
-    title: item.title,
-    text: `${item.title} — 来自${item.source || '今日热榜'}`,
-    url: shortUrl
-  };
-  if (navigator.share) {
-    try { await navigator.share(shareData); }
-    catch (e) { if (e.name !== 'AbortError') copyLink(shortUrl); }
-  } else {
-    copyLink(shortUrl);
+
+  // Show share card modal
+  showShareCardModal({ ...item, url: shortUrl });
+}
+
+function showShareCardModal(item) {
+  // Generate share card HTML
+  const cardHtml = generateShareCard(item);
+
+  // Generate QR code
+  const qrCodeSvg = generateQRCode(item.url);
+
+  // Create modal overlay
+  const modal = document.createElement('div');
+  modal.className = 'share-modal-overlay';
+  modal.innerHTML = `
+    <div class="share-modal">
+      <div class="share-modal-header">
+        <h3>分享文章</h3>
+        <button class="share-modal-close">&times;</button>
+      </div>
+      <div class="share-modal-body">
+        ${cardHtml}
+      </div>
+      <div class="share-modal-actions">
+        <button class="share-btn share-btn-primary" data-action="copy-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+          </svg>
+          复制链接
+        </button>
+        <button class="share-btn share-btn-secondary" data-action="download">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          下载图片
+        </button>
+        ${navigator.share ? `
+          <button class="share-btn share-btn-secondary" data-action="native-share">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+            系统分享
+          </button>
+        ` : ''}
+      </div>
+    </div>
+  `;
+
+  // Insert QR code into the card
+  const qrContainer = modal.querySelector('.qr-code');
+  if (qrContainer) {
+    qrContainer.innerHTML = qrCodeSvg;
   }
+
+  document.body.appendChild(modal);
+
+  // Event handlers
+  const closeModal = () => modal.remove();
+
+  modal.querySelector('.share-modal-close').addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  modal.querySelector('[data-action="copy-link"]').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(item.url);
+      showToast('链接已复制');
+    } catch (e) {
+      copyLink(item.url);
+    }
+  });
+
+  modal.querySelector('[data-action="download"]').addEventListener('click', () => {
+    downloadShareCard(modal.querySelector('.share-card'), item.title);
+  });
+
+  const nativeShareBtn = modal.querySelector('[data-action="native-share"]');
+  if (nativeShareBtn) {
+    nativeShareBtn.addEventListener('click', async () => {
+      try {
+        await navigator.share({
+          title: item.title,
+          text: `${item.title} — 来自${item.source || '今日热榜'}`,
+          url: item.url
+        });
+        closeModal();
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          console.error('Share failed:', e);
+        }
+      }
+    });
+  }
+}
+
+function downloadShareCard(cardElement, title) {
+  // Create a canvas to render the card
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  // Set canvas size (2x for retina)
+  const scale = 2;
+  canvas.width = 800 * scale;
+  canvas.height = 1000 * scale;
+  ctx.scale(scale, scale);
+
+  // Draw background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 800, 1000);
+
+  // Draw header
+  ctx.fillStyle = '#4f6ef6';
+  ctx.fillRect(0, 0, 800, 60);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.fillText('今日热榜', 30, 40);
+
+  // Draw source
+  ctx.fillStyle = '#666666';
+  ctx.font = '16px sans-serif';
+  ctx.fillText(item.source || '未知来源', 30, 100);
+
+  // Draw title
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = 'bold 32px sans-serif';
+  const titleLines = wrapText(ctx, title || '无标题', 740);
+  let y = 150;
+  titleLines.forEach(line => {
+    ctx.fillText(line, 30, y);
+    y += 40;
+  });
+
+  // Draw summary if exists
+  if (item.summary) {
+    y += 20;
+    ctx.fillStyle = '#666666';
+    ctx.font = '18px sans-serif';
+    const summaryLines = wrapText(ctx, item.summary.substring(0, 150), 740);
+    summaryLines.forEach(line => {
+      ctx.fillText(line, 30, y);
+      y += 28;
+    });
+  }
+
+  // Draw QR code area
+  const qrY = 850;
+  ctx.fillStyle = '#f5f5f5';
+  ctx.fillRect(30, qrY, 740, 120);
+  ctx.fillStyle = '#666666';
+  ctx.font = '14px sans-serif';
+  ctx.fillText('扫码查看详情', 180, qrY + 65);
+
+  // Convert to blob and download
+  canvas.toBlob((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title || '分享'}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('图片已下载');
+  });
+}
+
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split('');
+  const lines = [];
+  let currentLine = '';
+
+  for (let i = 0; i < words.length; i++) {
+    const testLine = currentLine + words[i];
+    const metrics = ctx.measureText(testLine);
+
+    if (metrics.width > maxWidth && currentLine) {
+      lines.push(currentLine);
+      currentLine = words[i];
+    } else {
+      currentLine = testLine;
+    }
+  }
+  lines.push(currentLine);
+
+  return lines.slice(0, 4); // Max 4 lines
 }
 
 async function getShortLink(item, originalUrl) {
@@ -492,6 +1078,90 @@ function rerankDuplicateEvents(items, windowSize = 5) {
   return ranked;
 }
 
+// ── Recommendation Algorithm Enhancements ──
+
+function reduceRandomness(baseScore, seed) {
+  // Reduce random range from ±50 to ±15
+  // Use deterministic seed if provided for testability
+  let random;
+  if (seed) {
+    // Simple hash-based pseudo-random
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      const char = seed.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    random = (Math.abs(hash) % 1000) / 1000; // 0-1
+  } else {
+    random = Math.random();
+  }
+
+  return (random - 0.5) * 30; // ±15 range
+}
+
+function calculateMMR(items, count, options = {}) {
+  const lambda = options.lambda !== undefined ? options.lambda : 0.5;
+  const result = [];
+
+  if (!items || items.length === 0) return result;
+
+  const remaining = [...items];
+
+  // Sort by score to ensure we start with highest relevance
+  remaining.sort((a, b) => b.score - a.score);
+
+  while (result.length < count && remaining.length > 0) {
+    let bestMMRScore = -Infinity;
+    let bestIndex = 0;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const candidate = remaining[i];
+
+      // Relevance component (normalized score)
+      const maxScore = remaining[0].score; // Already sorted
+      const relevance = candidate.score / maxScore;
+
+      // Diversity component (max similarity to already selected items)
+      let maxSimilarity = 0;
+      if (result.length > 0 && candidate.keywords) {
+        for (const selected of result) {
+          if (selected.keywords) {
+            const similarity = calculateJaccardSimilarity(candidate.keywords, selected.keywords);
+            maxSimilarity = Math.max(maxSimilarity, similarity);
+          }
+        }
+      }
+
+      // MMR formula: λ * Relevance - (1 - λ) * MaxSimilarity
+      const mmrScore = lambda * relevance - (1 - lambda) * maxSimilarity;
+
+      if (mmrScore > bestMMRScore) {
+        bestMMRScore = mmrScore;
+        bestIndex = i;
+      }
+    }
+
+    // Move best item from remaining to result
+    const [bestItem] = remaining.splice(bestIndex, 1);
+    result.push(bestItem);
+  }
+
+  return result;
+}
+
+function calculateJaccardSimilarity(setA, setB) {
+  if (!setA || !setB || setA.length === 0 || setB.length === 0) return 0;
+
+  const a = new Set(setA);
+  const b = new Set(setB);
+
+  const intersection = new Set([...a].filter(x => b.has(x)));
+  const union = new Set([...a, ...b]);
+
+  return intersection.size / union.size;
+}
+
 function buildHybridFeed() {
   const unified = [];
   const now = Date.now();
@@ -562,7 +1232,8 @@ function buildHybridFeed() {
 
     score += Math.max(0, 10 - ageMin * 0.5);
 
-    score += (Math.random() - 0.5) * 50;
+    // 使用降低的随机性（±15 而非 ±50）
+    score += reduceRandomness(score);
 
     let reason = '热门推荐';
     for (const tag of state.recommender.interests) {
@@ -570,7 +1241,10 @@ function buildHybridFeed() {
       if (kws.some(kw => item.title.includes(kw))) { reason = `你关注「${tag}」`; break; }
     }
 
-    return { ...scoredItem, score, reason };
+    // 提取关键词用于 MMR 多样性计算
+    const keywords = extractEventKeywords(item.title);
+
+    return { ...scoredItem, score, reason, keywords };
   });
 
   scored.sort((a, b) => b.score - a.score);
@@ -587,7 +1261,11 @@ function buildHybridFeed() {
   }
   scored.sort((a, b) => b.score - a.score);
 
-  const ranked = rerankDuplicateEvents(rerankCandidates(scored));
+  // 使用 MMR 算法进行重排序，平衡相关性和多样性
+  // lambda=0.7 表示 70% 权重给相关性，30% 权重给多样性
+  const mmrRanked = calculateMMR(scored, 50, { lambda: 0.7 });
+
+  const ranked = mmrRanked;
   const topIds = ranked.slice(0, 30).map(i => i.id);
   shownIds.push(...topIds);
   sessionStorage.setItem('toutiao_shown', JSON.stringify(shownIds));
@@ -598,9 +1276,10 @@ function buildHybridFeed() {
 // ── Daily Digest ──
 
 function renderDailyDigest() {
-  const top5 = selectRecommendDigestItems(state.hotItems);
+  const top5 = selectRecommendDigestItems(state.hotItems, state.recommender.interests);
   if (!top5.length) return '';
 
+  const label = getDigestLabel();
   const items = top5.map((h, i) => {
     const plat = getPlatformName(h.platform);
     return `<div class="digest-item" onclick="window.open('${escapeHtml(h.url || '#')}','_blank')">
@@ -611,7 +1290,7 @@ function renderDailyDigest() {
   }).join('');
 
   return `<div class="digest-card">
-    <div class="digest-header">📋 实时热榜 Top 5</div>
+    <div class="digest-header">${label}</div>
     ${items}
   </div>`;
 }
@@ -623,6 +1302,8 @@ function renderTab() {
   if (state.currentTab === 'recommend') renderRecommendTab();
   else if (state.currentTab === 'hot') renderHotTab();
   else if (state.currentTab === 'rss') renderRssTab();
+  else if (state.currentTab === 'readlater') renderReadLaterTab();
+  else if (state.currentTab === 'achievements') renderAchievementsTab();
   else if (state.currentTab === 'bookmark') renderBookmarkTab();
   else if (state.currentTab === 'history') renderHistoryTab();
   else if (state.currentTab === 'dislike') renderDislikeTab();
@@ -730,15 +1411,35 @@ function loadFeedPage() {
       const imgHtml = item.image
         ? `<div class="feed-img-wrap"><img src="${escapeHtml(item.image)}" alt="" loading="lazy" onerror="this.style.opacity='0';this.parentElement.querySelector('.fallback').style.display='flex'"><div class="fallback" style="background:${g};display:none">${icon}</div></div>`
         : `<div class="feed-img-wrap"><div class="fallback" style="background:${g};display:flex">${icon}</div></div>`;
+
+      // Check if item has been read
+      const isRead = isArticleRead({ title: item.title, url: item.url }, state.recommender.history);
+      const readClass = isRead ? ' read' : '';
+      const unreadBadge = isRead ? '' : '<span class="unread-badge">未读</span>';
+
       const card = document.createElement('div');
-      card.className = 'feed-card';
+      card.className = 'feed-card' + readClass;
       card.classList.add('fade-in');
       const starred = isBookmarked(item.id);
-      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, hide: true })}`;
+      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}${unreadBadge}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, readLater: { id: item.id, title: item.title, url: item.url, source: item.source, type: item.type, image: item.image }, hide: true })}`;
       card.addEventListener('click', (e) => {
         if (e.target.closest('.card-action-btn')) return;
         state.recommender.recordView(item);
-        if (item.url) window.open(item.url, '_blank');
+        if (item.type === 'rss') {
+          // RSS文章打开阅读视图
+          openReader({
+            id: item.id,
+            title: item.title,
+            url: item.url,
+            link: item.url,
+            source: item.source,
+            summary: '',
+            pub_date: new Date(item.timestamp).toISOString()
+          });
+        } else {
+          // 热搜直接跳外链
+          if (item.url) window.open(item.url, '_blank');
+        }
       });
       card.querySelector('[data-action="share"]').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -751,6 +1452,14 @@ function loadFeedPage() {
         const btn = e.currentTarget;
         btn.classList.toggle('active', nowStarred);
         btn.innerHTML = `${starIcon(nowStarred)}<span>${starLabel(nowStarred)}</span>`;
+      });
+      card.querySelector('[data-action="readlater"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const saved = toggleReadLater({ id: item.id, title: item.title, url: item.url, source: item.source, type: item.type, image: item.image });
+        const btn = e.currentTarget;
+        btn.classList.toggle('active', saved);
+        btn.innerHTML = `${clockIcon(saved)}<span>${clockLabel(saved)}</span>`;
+        showToast(saved ? '已添加到稍后阅读' : '已从稍后阅读移除');
       });
       card.querySelector('[data-action="hide"]').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -950,15 +1659,19 @@ function renderRssList() {
     const bmId = 'rss_' + a.id;
     const starred = isBookmarked(bmId);
     const summary = a.summary ? a.summary.replace(/<[^>]*>/g, '').trim() : '';
-    return `<article class="rss-article-card" data-bmid="${bmId}">
+    const isRead = isArticleRead({ title: a.title, url: a.link }, state.recommender.history);
+    const readClass = isRead ? ' read' : '';
+    const unreadBadge = isRead ? '' : '<span class="unread-badge">未读</span>';
+
+    return `<article class="rss-article-card${readClass}" data-bmid="${bmId}" data-aid="${a.id}">
       ${img}
       <div class="card-header">
         <span class="source-badge">${escapeHtml(a.source_name)}</span>
         <span class="card-time">${formatTime(a.pub_date)}</span>
       </div>
-      <h3 class="card-title"><a href="${escapeHtml(a.link || '#')}" target="_blank" rel="noopener">${escapeHtml(a.title)}</a></h3>
+      <h3 class="card-title">${escapeHtml(a.title)}${unreadBadge}</h3>
       ${summary ? `<p class="card-summary card-summary-clamp" data-expanded="false">${escapeHtml(summary)}</p><button class="summary-toggle">展开全文</button>` : ''}
-      ${buildCardActions({ share: true, bookmark: { starred, bmid: bmId } })}
+      ${buildCardActions({ share: true, bookmark: { starred, bmid: bmId }, readLater: { id: bmId, title: a.title, url: a.link, source: a.source_name, type: 'rss', image: a.image_url } })}
     </article>`;
   }).join('');
 
@@ -985,6 +1698,42 @@ function renderRssList() {
         const nowStarred = isBookmarked(bmId);
         el.classList.toggle('active', nowStarred);
         el.innerHTML = `${starIcon(nowStarred)}<span>${starLabel(nowStarred)}</span>`;
+      }
+    });
+  });
+
+  list.querySelectorAll('.rss-article-card [data-action="readlater"]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const bmId = el.closest('.rss-article-card').dataset.bmid;
+      const aid = bmId.replace('rss_', '');
+      const a = state.articles.find(x => String(x.id) === aid);
+      if (a) {
+        const saved = toggleReadLater({ id: bmId, title: a.title, url: a.link || '', source: a.source_name, type: 'rss', image: a.image_url || null });
+        el.classList.toggle('active', saved);
+        el.innerHTML = `${clockIcon(saved)}<span>${clockLabel(saved)}</span>`;
+        showToast(saved ? '已添加到稍后阅读' : '已从稍后阅读移除');
+      }
+    });
+  });
+
+  // RSS卡片点击打开阅读视图
+  list.querySelectorAll('.rss-article-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.card-action-btn') || e.target.closest('.summary-toggle')) return;
+      const aid = card.dataset.aid;
+      const a = state.articles.find(x => String(x.id) === aid);
+      if (a) {
+        openReader({
+          id: 'rss_' + a.id,
+          title: a.title,
+          url: a.link || '',
+          link: a.link || '',
+          source: a.source_name,
+          summary: a.summary || '',
+          pub_date: a.pub_date
+        });
       }
     });
   });
@@ -1086,6 +1835,164 @@ function renderBookmarkTab() {
       renderBookmarkTab();
     });
   });
+}
+
+// ── Read Later tab ──
+
+function renderReadLaterTab() {
+  const area = $('#contentArea');
+  const items = getReadLaterList();
+  if (!items.length) {
+    area.innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><p>暂无稍后阅读</p><p style="font-size:12px;margin-top:4px">在文章中点击"稍后阅读"按钮添加</p></div>`;
+    return;
+  }
+
+  area.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <span style="font-size:13px;color:var(--text-muted)">共 ${items.length} 篇</span>
+    <button class="sub-tab" id="clearReadLaterBtn" style="font-size:12px">清空列表</button>
+  </div>
+  <div class="trending-list" id="readLaterList">${items.map(item => `
+    <div class="trending-item" data-id="${escapeHtml(item.id)}">
+      <div class="trending-info">
+        <div class="trending-title">${escapeHtml(item.title)}</div>
+        <div class="trending-meta">
+          <span class="platform-badge ${item.platform || 'ithome'}">${escapeHtml(item.source)}</span>
+          <span style="font-size:11px;color:var(--text-muted)">${item.timestamp ? timeAgo(item.timestamp) : ''}</span>
+          <span style="cursor:pointer;color:var(--red)" class="remove-readlater-btn" data-id="${escapeHtml(item.id)}">移除</span>
+        </div>
+      </div>
+    </div>`).join('')}</div>`;
+
+  const clearBtn = document.getElementById('clearReadLaterBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (confirm('确定清空稍后阅读列表吗？')) {
+        localStorage.setItem('toutiao_readLater', '[]');
+        showToast('已清空');
+        renderReadLaterTab();
+      }
+    });
+  }
+
+  area.querySelectorAll('.trending-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.remove-readlater-btn')) return;
+      const item = items.find(b => b.id === el.dataset.id);
+      if (item && item.url) {
+        window.open(item.url, '_blank');
+        // Remove from list after opening
+        toggleReadLater({ id: item.id });
+        showToast('已从稍后阅读移除');
+        setTimeout(() => renderReadLaterTab(), 300);
+      }
+    });
+  });
+
+  area.querySelectorAll('.remove-readlater-btn').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleReadLater({ id: el.dataset.id });
+      showToast('已移除');
+      renderReadLaterTab();
+    });
+  });
+}
+
+// ── Achievements tab ──
+
+function renderAchievementsTab() {
+  const area = $('#contentArea');
+  const stats = state.recommender.getReadingStats();
+  const today = new Date().toISOString().split('T')[0];
+
+  // Get weekly report
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 6);
+  const weeklyReport = getWeeklyReport(state.recommender.history, today);
+
+  const badgeIcons = { bronze: '🥉', silver: '🥈', gold: '🥇' };
+  const badgeNames = { bronze: '铜牌阅读达人', silver: '银牌阅读达人', gold: '金牌阅读达人' };
+
+  area.innerHTML = `
+    <div style="padding:16px 0">
+      <h2 style="font-size:18px;margin-bottom:16px;color:var(--text-primary)">阅读成就</h2>
+
+      <!-- Stats cards -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:24px">
+        <div class="achievement-stat-card">
+          <div class="stat-icon">🔥</div>
+          <div class="stat-value">${stats.streak || 0}</div>
+          <div class="stat-label">连续打卡</div>
+        </div>
+        <div class="achievement-stat-card">
+          <div class="stat-icon">📚</div>
+          <div class="stat-value">${stats.totalArticles || 0}</div>
+          <div class="stat-label">总阅读量</div>
+        </div>
+        <div class="achievement-stat-card">
+          <div class="stat-icon">📖</div>
+          <div class="stat-value">${stats.count || 0}</div>
+          <div class="stat-label">今日阅读</div>
+        </div>
+      </div>
+
+      <!-- Badges -->
+      <div style="margin-bottom:24px">
+        <h3 style="font-size:15px;margin-bottom:12px;color:var(--text-primary)">我的徽章</h3>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          ${stats.badges && stats.badges.length > 0 ? stats.badges.map(badge => `
+            <div class="badge-card earned">
+              <div class="badge-icon">${badgeIcons[badge]}</div>
+              <div class="badge-name">${badgeNames[badge]}</div>
+            </div>
+          `).join('') : `
+            <div class="badge-card locked">
+              <div class="badge-icon" style="opacity:0.3">🥉</div>
+              <div class="badge-name" style="opacity:0.5">铜牌 (100篇)</div>
+            </div>
+            <div class="badge-card locked">
+              <div class="badge-icon" style="opacity:0.3">🥈</div>
+              <div class="badge-name" style="opacity:0.5">银牌 (500篇)</div>
+            </div>
+            <div class="badge-card locked">
+              <div class="badge-icon" style="opacity:0.3">🥇</div>
+              <div class="badge-name" style="opacity:0.5">金牌 (1000篇)</div>
+            </div>
+          `}
+        </div>
+      </div>
+
+      <!-- Weekly report -->
+      <div>
+        <h3 style="font-size:15px;margin-bottom:12px;color:var(--text-primary)">本周阅读报告</h3>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+            <span style="color:var(--text-secondary)">本周阅读</span>
+            <strong>${weeklyReport.totalArticles} 篇</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+            <span style="color:var(--text-secondary)">活跃天数</span>
+            <strong>${weeklyReport.activeDays} / 7 天</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+            <span style="color:var(--text-secondary)">日均阅读</span>
+            <strong>${weeklyReport.activeDays > 0 ? (weeklyReport.totalArticles / weeklyReport.activeDays).toFixed(1) : 0} 篇</strong>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:12px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">每日阅读量</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              ${Object.entries(weeklyReport.dailyBreakdown).map(([date, count]) => `
+                <div style="flex:1;min-width:40px;text-align:center">
+                  <div style="font-size:11px;color:var(--text-muted)">${date.slice(5)}</div>
+                  <div style="font-size:14px;font-weight:600;color:var(--accent)">${count}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ── History tab ──
@@ -1383,6 +2290,18 @@ if (typeof module !== 'undefined' && module.exports) {
     isSameEvent,
     rerankCandidates,
     rerankDuplicateEvents,
-    scoreCandidate
+    scoreCandidate,
+    computeImplicitInterests,
+    getDecayedBehaviorWeights,
+    isArticleRead,
+    getUnreadCount,
+    getReadLaterList,
+    isReadLater,
+    toggleReadLater,
+    reduceRandomness,
+    calculateMMR,
+    calculateJaccardSimilarity,
+    generateShareCard,
+    generateQRCode
   };
 }

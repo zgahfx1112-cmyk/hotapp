@@ -12,6 +12,11 @@ import threading
 import signal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
+import sys
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+from reader import extract_article
 
 ssl._create_default_https_context = ssl._create_unverified_context
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -418,6 +423,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/api/trending"):
             self._api_trending()
+        elif self.path.startswith("/api/reader"):
+            self._api_reader()
         elif self.path == "/":
             self.path = "/index.html"
             super().do_GET()
@@ -485,6 +492,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.end_headers()
         self.wfile.write(body)
+
+    def _api_reader(self):
+        """正文提取API: /api/reader?url=xxx"""
+        query = urllib.parse.urlparse(self.path).query
+        params = urllib.parse.parse_qs(query)
+        url = params.get('url', [None])[0]
+
+        if not url:
+            body = json.dumps({'error': 'Missing url parameter'}, ensure_ascii=False).encode('utf-8')
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        try:
+            result = extract_article(url)
+            body = json.dumps(result, ensure_ascii=False).encode('utf-8')
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "max-age=3600")
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            body = json.dumps({'error': str(e)}, ensure_ascii=False).encode('utf-8')
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body)
 
     def log_message(self, fmt, *args):
         if "/api/" in str(args):

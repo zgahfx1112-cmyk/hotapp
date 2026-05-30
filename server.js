@@ -60,7 +60,7 @@ app.get('/s/:code', (req, res) => {
   res.redirect(302, row.url);
 });
 
-// ── HotApp proxy (/api/hot/* → Python :8000) ──
+// ── HotApp proxy (/api/hot/* and /api/reader → Python :8000) ──
 
 app.use('/api/hot', (req, res) => {
   const opts = {
@@ -76,6 +76,26 @@ app.use('/api/hot', (req, res) => {
   });
   proxy.on('error', () => {
     res.status(502).json({ items: [], errors: ['热搜服务暂不可用'] });
+  });
+  req.pipe(proxy);
+});
+
+// ── Reader proxy (/api/reader → Python :8000) ──
+
+app.use('/api/reader', (req, res) => {
+  const opts = {
+    hostname: 'localhost',
+    port: HOTAPP_PORT,
+    path: '/api/reader' + (req.url || ''),
+    method: req.method,
+    headers: { ...req.headers, host: `localhost:${HOTAPP_PORT}` }
+  };
+  const proxy = http.request(opts, proxyRes => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.pipe(res);
+  });
+  proxy.on('error', () => {
+    res.status(502).json({ error: '阅读服务暂不可用' });
   });
   req.pipe(proxy);
 });
