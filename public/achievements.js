@@ -159,11 +159,13 @@ function renderWeeklyReport(report) {
   `;
 }
 
-module.exports = {
-  updateReadingStats,
-  checkMilestones,
-  getWeeklyReport,
-  formatStreakDisplay,
-  renderAchievementCard,
-  renderWeeklyReport
-};
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    updateReadingStats,
+    checkMilestones,
+    getWeeklyReport,
+    formatStreakDisplay,
+    renderAchievementCard,
+    renderWeeklyReport
+  };
+}
