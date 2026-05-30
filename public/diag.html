@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>JS 诊断工具</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+    .log { margin: 5px 0; padding: 8px; background: #2d2d2d; border-left: 3px solid #4a4a4a; white-space: pre-wrap; }
+    .error { border-left-color: #f14c4c; color: #f14c4c; }
+    .success { border-left-color: #4ec9b0; color: #4ec9b0; }
+    .info { border-left-color: #569cd6; }
+    .warn { border-left-color: #ce9178; color: #ce9178; }
+    button { padding: 10px 20px; margin: 5px; background: #0e639c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    button:hover { background: #1177bb; }
+  </style>
+</head>
+<body>
+  <h1>🔍 JavaScript 诊断工具</h1>
+  <p>逐个测试 JS 文件，定位问题</p>
+
+  <button onclick="testFile('/topic-keywords.js')">1. topic-keywords.js</button>
+  <button onclick="testFile('/digest.js')">2. digest.js</button>
+  <button onclick="testFile('/achievements.js')">3. achievements.js</button>
+  <button onclick="testFile('/init-controller.js')">4. init-controller.js</button>
+  <button onclick="testFile('/app.js')">5. app.js</button>
+  <br>
+  <button onclick="testAll()" style="background: #388a34;">测试全部文件</button>
+  <button onclick="document.getElementById('output').innerHTML=''" style="background: #c53030;">清空输出</button>
+
+  <div id="output"></div>
+
+  <script>
+    const output = document.getElementById('output');
+
+    function log(msg, type = 'info') {
+      const div = document.createElement('div');
+      div.className = 'log ' + type;
+      div.textContent = msg;
+      output.appendChild(div);
+    }
+
+    async function fetchAndEval(url) {
+      log(`📥 下载: ${url}`, 'info');
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          log(`❌ HTTP ${resp.status}: ${url}`, 'error');
+          return false;
+        }
+        const code = await resp.text();
+        log(`✅ 下载成功 (${code.length} bytes)`, 'success');
+
+        log(`🔧 执行中...`, 'info');
+        try {
+          eval(code);
+          log(`✅ 执行成功: ${url}`, 'success');
+          return true;
+        } catch(e) {
+          log(`❌ 执行失败: ${url}`, 'error');
+          log(`错误: ${e.message}`, 'error');
+          log(`堆栈:\n${e.stack}`, 'error');
+          return false;
+        }
+      } catch(e) {
+        log(`❌ 下载失败: ${e.message}`, 'error');
+        return false;
+      }
+    }
+
+    async function testFile(url) {
+      log(`\n========== 测试 ${url} ==========`, 'info');
+      const success = await fetchAndEval(url);
+
+      if (success) {
+        log(`\n🔎 检查导出:`, 'info');
+        // 检查常见变量
+        const checks = [
+          'TOPIC_KEYWORDS',
+          'selectRecommendDigestItems',
+          'getDigestLabel',
+          'updateReadingStats',
+          'checkMilestones',
+          'getWeeklyReport',
+          'createInitController',
+          'state',
+          'Recommender',
+          'init'
+        ];
+
+        checks.forEach(name => {
+          try {
+            const val = eval(name);
+            const type = typeof val;
+            if (type !== 'undefined') {
+              log(`  ✅ ${name}: ${type}`, 'success');
+            }
+          } catch(e) {
+            // 未定义，跳过
+          }
+        });
+      }
+    }
+
+    async function testAll() {
+      log('\n🚀 开始测试所有文件...\n', 'info');
+
+      const files = [
+        '/topic-keywords.js',
+        '/digest.js',
+        '/achievements.js',
+        '/init-controller.js',
+        '/app.js'
+      ];
+
+      for (const file of files) {
+        const success = await testFile(file);
+        if (!success) {
+          log(`\n⚠️ ${file} 失败，停止测试后续文件`, 'warn');
+          break;
+        }
+      }
+
+      log('\n✅ 测试完成', 'success');
+    }
+
+    log('💡 点击按钮测试单个文件，或点击"测试全部文件"', 'info');
+  </script>
+</body>
+</html>
