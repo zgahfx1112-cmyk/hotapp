@@ -1,3 +1,414 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Remote JS Test</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+    .log { margin: 5px 0; padding: 5px; background: #2d2d2d; border-left: 3px solid #4a4a4a; }
+    .error { border-left-color: #f14c4c; color: #f14c4c; }
+    .success { border-left-color: #4ec9b0; color: #4ec9b0; }
+    .info { border-left-color: #569cd6; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Remote JS Test</h1>
+  <p>测试从 hotapp.onrender.com 下载的 JS 文件</p>
+  <div id="output"></div>
+  
+  <script>
+    const output = document.getElementById('output');
+    const logs = [];
+    
+    function log(msg, type = 'info') {
+      logs.push({ msg, type });
+      const div = document.createElement('div');
+      div.className = 'log ' + type;
+      div.textContent = msg;
+      output.appendChild(div);
+    }
+    
+    // 捕获错误
+    window.onerror = function(msg, url, line, col, error) {
+      log('❌ ' + msg + ' at line ' + line, 'error');
+      if (error && error.stack) {
+        log(error.stack, 'error');
+      }
+      return false;
+    };
+    
+    // 模拟 DOM API
+    const mockElement = {
+      id: '',
+      classList: { 
+        add: () => {}, 
+        remove: () => {}, 
+        contains: () => false,
+        toggle: () => {}
+      },
+      style: {},
+      dataset: {},
+      innerHTML: '',
+      textContent: '',
+      addEventListener: function(event, handler) {
+        log('  addEventListener: ' + event, 'info');
+      },
+      removeEventListener: () => {},
+      querySelector: () => mockElement,
+      querySelectorAll: () => [],
+      appendChild: () => {},
+      insertAdjacentHTML: () => {},
+      getBoundingClientRect: () => ({ top: 0, left: 0, width: 100, height: 50 }),
+      offsetWidth: 100,
+      offsetHeight: 50
+    };
+    
+    // Mock window/document/navigator
+    window.addEventListener = () => {};
+    window.removeEventListener = () => {};
+    window.scrollY = 0;
+    window.scrollTo = () => {};
+    
+    document.addEventListener = () => {};
+    document.removeEventListener = () => {};
+    document.getElementById = (id) => {
+      log('getElementById: ' + id, 'info');
+      return { ...mockElement, id };
+    };
+    document.querySelector = (sel) => {
+      log('querySelector: ' + sel, 'info');
+      return mockElement;
+    };
+    document.querySelectorAll = (sel) => {
+      log('querySelectorAll: ' + sel, 'info');
+      return [];
+    };
+    document.createElement = () => ({ ...mockElement, style: {} });
+    document.body = mockElement;
+    
+    navigator.share = false;
+    navigator.serviceWorker = {
+      register: () => Promise.resolve(),
+      getRegistrations: () => Promise.resolve([])
+    };
+    navigator.clipboard = {
+      writeText: () => Promise.resolve()
+    };
+    
+    localStorage.getItem = () => null;
+    localStorage.setItem = () => {};
+    localStorage.removeItem = () => {};
+    
+    sessionStorage.getItem = () => null;
+    sessionStorage.setItem = () => {};
+    sessionStorage.removeItem = () => {};
+    
+    fetch = () => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({})
+    });
+    
+    IntersectionObserver = class {
+      observe() {}
+      disconnect() {}
+    };
+    
+    showToast = () => {};
+    
+    log('✅ DOM mock 准备完成', 'success');
+    log('开始加载远程 JS 文件...', 'info');
+  </script>
+  
+  <script>
+// ===== /topic-keywords.js =====
+// TOPIC_KEYWORDS - 兴趣标签关键词映射
+// 单独文件避免 const 重复声明冲突
+
+const TOPIC_KEYWORDS = {
+  科技: ['AI','人工智能','芯片','苹果','华为','特斯拉','SpaceX','大模型','GPT','ChatGPT','机器人','自动驾驶','手机','5G','6G','量子','航天','卫星','新能源','电池','小米','OPPO','vivo','荣耀','显卡','CPU','GPU','英特尔','AMD','英伟达','NVIDIA','微软','Google','Meta','字节','腾讯','阿里','百度','京东','拼多多','美团','无人机','星链','火箭','登陆','探测器','基因','生物','科技','技术','软件','硬件','系统','开源','编程','代码','算法'],
+  游戏: ['游戏','原神','王者荣耀','英雄联盟','LOL','黑神话','崩坏','崩铁','星穹铁道','米哈游','网易','腾讯游戏','3A','Steam','Switch','PS5','Xbox','电竞','LPL','KPL','S赛','TI','DOTA','CS','瓦罗','绝地求生','吃鸡','永劫','魔兽','炉石','二次元','漫威','DC','赛博','主机','手游','端游','独立游戏','版号','氪金','抽卡'],
+  娱乐: ['电影','综艺','明星','演唱会','票房','上映','电视剧','网剧','综艺节目','八卦','恋情','结婚','离婚','出轨','塌房','肖战','王一博','迪丽热巴','杨紫','赵丽颖','杨幂','耽改','选秀','偶像','女团','男团','C位','出道','流量','粉丝','热搜','绯闻','综艺','春晚','跨年','颁奖','红毯','杂志','封面','MV','新歌','专辑'],
+  体育: ['NBA','足球','世界杯','奥运会','乒乓球','羽毛球','排球','游泳','田径','马拉松','滑雪','滑板','篮球','CBA','中超','英超','西甲','欧冠','德甲','意甲','法甲','梅西','C罗','詹姆斯','库里','杜兰特','字母哥','约基奇','孙颖莎','马龙','樊振东','全红婵','谷爱凌','郑钦文','苏炳添'],
+  财经: ['股市','A股','房价','GDP','人民币','基金','比特币','加密货币','区块链','经济','通胀','加息','降息','央行','理财','投资','保险','银行','贷款','利率','汇率','美股','港股','纳斯达克','道琼斯','恒生','上证','深证','创业板','科创板','牛市','熊市','分红','财报','利润','营收','市值','IPO','上市'],
+  教育: ['考研','高考','大学','就���','学历','专业','留学','雅思','托福','GRE','公务员','国考','省考','教师','编制','博士','硕士','本科','专科','职校','培训','双减','学区','录取','分数','志愿','招生','毕业','实习','秋招','春招','社招'],
+  社会: ['政策','民生','交通','补贴','医保','社保','养老','医疗','住房','公租房','公积金','环境','污染','天气','地震','台风','洪水','疫情','疫苗','安全','事故','火灾','犯罪','法律','法院','公安','消防','退伍','社保','退休','延迟退休','生育','二胎','三胎','人口','老龄化'],
+  国际: ['美国','日本','韩国','俄罗斯','乌克兰','欧洲','中东','非洲','东南亚','印度','朝鲜','台湾','南海','贸易','制裁','关税','战争','冲突','谈判','协议','峰会','联合国','WTO','北约','G7','G20','金砖','一带一路','外交','大使','签证','移民','难民','人权']
+};
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = TOPIC_KEYWORDS;
+}
+
+
+// ===== /digest.js =====
+// TOPIC_KEYWORDS 定义在 topic-keywords.js 中
+// Node.js 测试环境需显式 require
+if (typeof TOPIC_KEYWORDS === 'undefined') {
+  if (typeof require !== 'undefined') {
+    var TOPIC_KEYWORDS = require('./topic-keywords');
+  }
+}
+
+function matchInterests(title, interests) {
+  if (!interests || !interests.length) return false;
+  for (const tag of interests) {
+    const keywords = TOPIC_KEYWORDS[tag] || [];
+    for (const kw of keywords) {
+      if (title && title.includes(kw)) return true;
+    }
+  }
+  return false;
+}
+
+function selectRecommendDigestItems(hotItems, interests) {
+  const allowedPlatforms = new Set(['toutiao', 'baidu', 'weibo']);
+  const filtered = (hotItems || []).filter(item => allowedPlatforms.has(item.platform));
+
+  // 如果提供了兴趣标签，优先展示匹配的内容
+  if (interests && interests.length > 0) {
+    const matched = filtered.filter(item => matchInterests(item.title, interests));
+    const unmatched = filtered.filter(item => !matchInterests(item.title, interests));
+    return [...matched, ...unmatched].slice(0, 5);
+  }
+
+  return filtered.slice(0, 5);
+}
+
+function getDigestLabel(hour) {
+  const h = hour !== undefined ? hour : new Date().getHours();
+  if (h >= 6 && h < 11) return '☀️ 早间热榜';
+  if (h >= 11 && h < 17) return '🌞 午间热榜';
+  return '🌙 晚间热榜';
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { selectRecommendDigestItems, getDigestLabel };
+}
+
+
+// ===== /achievements.js =====
+/**
+ * 阅读成就系统
+ * - 连续打卡天数追踪
+ * - 阅读量里程碑徽章（100/500/1000篇）
+ * - 每周阅读报告
+ */
+
+const MILESTONES = {
+  bronze: 100,
+  silver: 500,
+  gold: 1000
+};
+
+function updateReadingStats(stats, today) {
+  const updated = { ...stats };
+  const lastRead = updated.lastRead;
+
+  if (lastRead === today) {
+    // Same day as last read, increment count
+    updated.count = (updated.count || 0) + 1;
+  } else {
+    // New day
+    const lastDate = lastRead ? new Date(lastRead) : null;
+    const todayDate = new Date(today);
+
+    if (lastDate) {
+      const diffDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+      if (diffDays === 1) {
+        // Consecutive day
+        updated.streak = (updated.streak || 0) + 1;
+      } else {
+        // Streak broken
+        updated.streak = 1;
+      }
+    } else {
+      // First read
+      updated.streak = 1;
+    }
+
+    updated.today = today;
+    updated.count = 1;
+  }
+
+  updated.lastRead = today;
+  return updated;
+}
+
+function checkMilestones(totalArticles) {
+  const badges = [];
+
+  if (totalArticles >= MILESTONES.bronze) badges.push('bronze');
+  if (totalArticles >= MILESTONES.silver) badges.push('silver');
+  if (totalArticles >= MILESTONES.gold) badges.push('gold');
+
+  return badges;
+}
+
+function getWeeklyReport(history, currentDate) {
+  const current = new Date(currentDate);
+  const weekStart = new Date(current);
+  weekStart.setDate(current.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const weekEnd = new Date(current);
+  weekEnd.setHours(23, 59, 59, 999);
+
+  const weeklyArticles = history.filter(item => {
+    const itemDate = new Date(item.timestamp);
+    return itemDate >= weekStart && itemDate <= weekEnd;
+  });
+
+  const dailyBreakdown = {};
+  const activeDaysSet = new Set();
+
+  weeklyArticles.forEach(item => {
+    const date = new Date(item.timestamp);
+    const dateStr = date.toISOString().split('T')[0];
+    dailyBreakdown[dateStr] = (dailyBreakdown[dateStr] || 0) + 1;
+    activeDaysSet.add(dateStr);
+  });
+
+  return {
+    totalArticles: weeklyArticles.length,
+    activeDays: activeDaysSet.size,
+    dailyBreakdown,
+    weekStart: weekStart.toISOString().split('T')[0],
+    weekEnd: weekEnd.toISOString().split('T')[0]
+  };
+}
+
+function formatStreakDisplay(days) {
+  return `${days}天`;
+}
+
+// UI组件：成就卡片
+function renderAchievementCard(stats, milestones) {
+  const badges = checkMilestones(milestones.totalArticles);
+  const badgeIcons = {
+    bronze: '🥉',
+    silver: '🥈',
+    gold: '🥇'
+  };
+
+  return `
+    <div class="achievement-card">
+      <div class="achievement-header">
+        <span class="achievement-icon">🏆</span>
+        <span class="achievement-title">阅读成就</span>
+      </div>
+      <div class="achievement-stats">
+        <div class="stat-item">
+          <div class="stat-value">${stats.streak || 0}</div>
+          <div class="stat-label">连续打卡</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${milestones.totalArticles || 0}</div>
+          <div class="stat-label">总阅读量</div>
+        </div>
+      </div>
+      ${badges.length > 0 ? `
+        <div class="achievement-badges">
+          ${badges.map(badge => `
+            <span class="badge ${badge}" title="${badge}阅读达人">
+              ${badgeIcons[badge]}
+            </span>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+// UI组件：周报卡片
+function renderWeeklyReport(report) {
+  const avgPerDay = report.activeDays > 0
+    ? (report.totalArticles / report.activeDays).toFixed(1)
+    : 0;
+
+  return `
+    <div class="weekly-report-card">
+      <div class="report-header">
+        <span class="report-icon">📊</span>
+        <span class="report-title">本周阅读报告</span>
+      </div>
+      <div class="report-summary">
+        <p>阅读 <strong>${report.totalArticles}</strong> 篇文章</p>
+        <p>活跃 <strong>${report.activeDays}</strong> 天</p>
+        <p>日均 <strong>${avgPerDay}</strong> 篇</p>
+      </div>
+      <div class="report-daily">
+        ${Object.entries(report.dailyBreakdown).map(([date, count]) => `
+          <div class="daily-item">
+            <span class="daily-date">${date.slice(5)}</span>
+            <span class="daily-count">${count}篇</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    updateReadingStats,
+    checkMilestones,
+    getWeeklyReport,
+    formatStreakDisplay,
+    renderAchievementCard,
+    renderWeeklyReport
+  };
+}
+
+
+// ===== /init-controller.js =====
+function createInitController(deps) {
+  return {
+    async init() {
+      deps.restorePrefs();
+      deps.initTheme();
+      deps.renderTab();
+      deps.renderInterestTags();
+      deps.setupTabs();
+      deps.registerSW();
+
+      let skeletonRemoved = false;
+      function tryRemoveSkeleton() {
+        if (!skeletonRemoved && deps.removeSkeleton) {
+          skeletonRemoved = true;
+          deps.removeSkeleton();
+        }
+      }
+
+      // 使用 Promise.allSettled 而非 Promise.all，避免单个请求失败导致整个页面卡住
+      const jobs = [
+        deps.loadSources()
+          .then(() => deps.afterSourcesLoaded && deps.afterSourcesLoaded())
+          .catch(err => console.error('[init] Sources fail:', err)),
+        deps.loadArticles(30)
+          .then(() => { tryRemoveSkeleton(); deps.afterArticlesLoaded && deps.afterArticlesLoaded(); })
+          .catch(err => { console.error('[init] Articles fail:', err); tryRemoveSkeleton(); }),
+        deps.loadHotData()
+          .then(() => { tryRemoveSkeleton(); deps.afterHotLoaded && deps.afterHotLoaded(); })
+          .catch(err => { console.error('[init] HotData fail:', err); tryRemoveSkeleton(); }),
+        deps.loadStats()
+          .then(() => deps.afterStatsLoaded && deps.afterStatsLoaded())
+          .catch(err => console.error('[init] Stats fail:', err))
+      ];
+
+      deps.getUserStats();
+      await Promise.allSettled(jobs);
+      // 兜底：确保骨架屏一定会被移除
+      tryRemoveSkeleton();
+    }
+  };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { createInitController };
+}
+
+
+// ===== /app.js =====
 // ── State ──
 
 const state = {
@@ -61,8 +472,7 @@ function buildCardActions(config) {
 // ── Init ──
 
 async function init() {
-  console.log('[App] init() called');
-  const controller = createInitController({
+  createInitController({
     restorePrefs() {
       try { state.rssFilter = localStorage.getItem('toutiao_rssFilter') || null; } catch {}
       try { state.hotFilter = localStorage.getItem('toutiao_hotFilter') || null; } catch {}
@@ -78,7 +488,6 @@ async function init() {
     loadHotData,
     loadStats,
     removeSkeleton() {
-      console.log('[App] removeSkeleton called');
       const skeleton = document.getElementById('skeletonLoader');
       if (skeleton) {
         skeleton.classList.add('fade-out');
@@ -86,11 +495,9 @@ async function init() {
       }
     },
     afterSourcesLoaded() {
-      console.log('[App] afterSourcesLoaded');
       if (state.currentTab === 'rss') renderTab();
     },
     afterArticlesLoaded() {
-      console.log('[App] afterArticlesLoaded, articles:', state.articles.length);
       state.initialLoad = false;
       state.feedItems = [];
       state.feedPage = 0;
@@ -98,7 +505,6 @@ async function init() {
       if (state.currentTab === 'recommend' || state.currentTab === 'rss') renderTab();
     },
     afterHotLoaded() {
-      console.log('[App] afterHotLoaded, hotItems:', state.hotItems.length);
       state.initialLoad = false;
       state.feedItems = [];
       state.feedPage = 0;
@@ -106,13 +512,9 @@ async function init() {
       if (state.currentTab === 'recommend' || state.currentTab === 'hot') renderTab();
     },
     afterStatsLoaded() {
-      console.log('[App] afterStatsLoaded');
       if (state.currentTab === 'recommend') renderTab();
     }
-  });
-  console.log('[App] controller created, calling controller.init()');
-  await controller.init();
-  console.log('[App] controller.init() completed');
+  }).init();
 }
 
 // ── API ──
@@ -2268,67 +2670,21 @@ function setupBrowserEvents() {
     }
   }, { passive: true });
 
-  // 初始化函数
-  const startApp = () => {
-    console.log('[App] Starting initialization...');
+  $('#btnRefresh').addEventListener('click', doRefresh);
+  $('#topBtn').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  window.addEventListener('scroll', () => {
+    $('#topBtn').classList.toggle('hidden', window.scrollY < 300);
+  }, { passive: true });
 
-    // 确保必要的 DOM 元素存在
-    const btnRefresh = $('#btnRefresh');
-    const topBtn = $('#topBtn');
-    const btnTheme = $('#btnTheme');
+  $('#btnTheme').addEventListener('click', toggleTheme);
 
-    if (btnRefresh) {
-      btnRefresh.addEventListener('click', doRefresh);
-    } else {
-      console.warn('[App] btnRefresh not found');
-    }
-
-    if (topBtn) {
-      topBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-    }
-
-    if (btnTheme) {
-      btnTheme.addEventListener('click', toggleTheme);
-    }
-
+  document.addEventListener('DOMContentLoaded', () => {
     if (typeof createInitController === 'undefined') {
-      console.error('[App] Init controller missing!');
-      const skeleton = document.getElementById('skeletonLoader');
-      if (skeleton) {
-        skeleton.innerHTML = '<div style="padding:20px;text-align:center;color:#f00;">加载失败：初始化控制器缺失</div>';
-      }
+      console.error('Init controller missing');
       return;
     }
-
-    // 调用 init 并捕获错误
-    init()
-      .then(() => console.log('[App] Initialization completed'))
-      .catch(err => {
-        console.error('[App] Initialization failed:', err);
-        // 移除骨架屏，显示错误
-        const skeleton = document.getElementById('skeletonLoader');
-        if (skeleton) {
-          skeleton.innerHTML = `<div style="padding:20px;text-align:center;color:#f00;">
-            加载失败：${err.message}<br>
-            <button onclick="location.reload()" style="margin-top:10px;padding:8px 16px;">重试</button>
-          </div>`;
-        }
-      });
-  };
-
-  // 如果 DOM 已加载完成，立即启动；否则等待 DOMContentLoaded
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', startApp);
-  } else {
-    startApp();
-  }
-
-  window.addEventListener('scroll', () => {
-    const topBtn = $('#topBtn');
-    if (topBtn) {
-      topBtn.classList.toggle('hidden', window.scrollY < 300);
-    }
-  }, { passive: true });
+    init();
+  });
 }
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined') {
@@ -2357,3 +2713,44 @@ if (typeof module !== 'undefined' && module.exports) {
     generateQRCode
   };
 }
+
+
+  </script>
+  
+  <script>
+    log('✅ 所有 JS 文件加载完成', 'success');
+    
+    // 检查关键变量
+    const checks = [
+      ['TOPIC_KEYWORDS', typeof TOPIC_KEYWORDS === 'object'],
+      ['selectRecommendDigestItems', typeof selectRecommendDigestItems === 'function'],
+      ['getDigestLabel', typeof getDigestLabel === 'function'],
+      ['updateReadingStats', typeof updateReadingStats === 'function'],
+      ['checkMilestones', typeof checkMilestones === 'function'],
+      ['getWeeklyReport', typeof getWeeklyReport === 'function'],
+      ['state', typeof state === 'object'],
+      ['Recommender', typeof Recommender === 'function']
+    ];
+    
+    log('
+=== 变量检查 ===', 'info');
+    checks.forEach(([name, ok]) => {
+      log((ok ? '✅' : '❌') + ' ' + name, ok ? 'success' : 'error');
+    });
+    
+    // 尝试初始化
+    log('
+=== 尝试初始化 ===', 'info');
+    try {
+      if (typeof init === 'function') {
+        log('✅ init 函数存在', 'success');
+        // 不调用 init，因为会访问真实 DOM
+      } else {
+        log('❌ init 函数不存在', 'error');
+      }
+    } catch(e) {
+      log('❌ 初始化检查失败: ' + e.message, 'error');
+    }
+  </script>
+</body>
+</html>
