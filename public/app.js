@@ -890,17 +890,59 @@ function clearDisliked() {
 // ── Theme ──
 
 function initTheme() {
-  let theme = 'light';
-  try { theme = localStorage.getItem('toutiao_theme') || 'light'; } catch {}
-  if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  let theme = 'auto';
+  try { theme = localStorage.getItem('toutiao_theme') || 'auto'; } catch {}
+
+  // 根据主题设置 data-theme 属性
+  if (theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  } else if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  } else {
+    // auto 模式：移除 data-theme，让 CSS 的 prefers-color-scheme 生效
+    document.documentElement.removeAttribute('data-theme');
+  }
+
+  // 更新按钮图标
   const btn = $('#btnTheme');
-  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+  if (btn) {
+    if (theme === 'dark') {
+      btn.textContent = '☀️';
+    } else if (theme === 'light') {
+      btn.textContent = '🌙';
+    } else {
+      // auto 模式显示系统当前偏好的反向图标
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      btn.textContent = prefersDark ? '☀️' : '🌙';
+    }
+  }
 }
 function toggleTheme() {
   const html = document.documentElement;
-  const isDark = html.getAttribute('data-theme') === 'dark';
-  if (isDark) { html.removeAttribute('data-theme'); localStorage.setItem('toutiao_theme', 'light'); $('#btnTheme').textContent = '🌙'; }
-  else { html.setAttribute('data-theme', 'dark'); localStorage.setItem('toutiao_theme', 'dark'); $('#btnTheme').textContent = '☀️'; }
+  const currentTheme = localStorage.getItem('toutiao_theme') || 'auto';
+
+  let newTheme;
+  if (currentTheme === 'auto') {
+    // 从 auto 切换到当前系统偏好的反向
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    newTheme = prefersDark ? 'light' : 'dark';
+  } else if (currentTheme === 'dark') {
+    newTheme = 'light';
+  } else {
+    newTheme = 'dark';
+  }
+
+  localStorage.setItem('toutiao_theme', newTheme);
+
+  if (newTheme === 'dark') {
+    html.setAttribute('data-theme', 'dark');
+    const btn = $('#btnTheme');
+    if (btn) btn.textContent = '☀️';
+  } else if (newTheme === 'light') {
+    html.setAttribute('data-theme', 'light');
+    const btn = $('#btnTheme');
+    if (btn) btn.textContent = '🌙';
+  }
 }
 
 // ── Hybrid scoring ──

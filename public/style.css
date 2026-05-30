@@ -19,8 +19,9 @@
   --transition: 0.15s ease;
 }
 
+/* 跟随系统暗色模式 - 仅在用户未手动选择时生效 */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg-primary: #1a1a1a;
     --bg-secondary: #242424;
     --bg-card: #242424;
@@ -33,6 +34,7 @@
   }
 }
 
+/* 用户手动选择暗色 */
 [data-theme="dark"] {
   --bg-primary: #1a1a1a;
   --bg-secondary: #242424;
@@ -43,6 +45,19 @@
   --text-secondary: #aaa;
   --text-muted: #777;
   --shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+/* 用户手动选择浅色 - 强制覆盖系统暗色 */
+[data-theme="light"] {
+  --bg-primary: #f5f6f8;
+  --bg-secondary: #fff;
+  --bg-card: #fff;
+  --bg-hover: #f0f1f5;
+  --border: #e1e4e8;
+  --text-primary: #1a1a2e;
+  --text-secondary: #5a5f72;
+  --text-muted: #9498a8;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
