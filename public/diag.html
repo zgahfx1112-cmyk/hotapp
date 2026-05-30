@@ -18,13 +18,8 @@
   <h1>🔍 JavaScript 诊断工具</h1>
   <p>逐个测试 JS 文件，定位问题</p>
 
-  <button onclick="testFile('/topic-keywords.js')">1. topic-keywords.js</button>
-  <button onclick="testFile('/digest.js')">2. digest.js</button>
-  <button onclick="testFile('/achievements.js')">3. achievements.js</button>
-  <button onclick="testFile('/init-controller.js')">4. init-controller.js</button>
-  <button onclick="testFile('/app.js')">5. app.js</button>
-  <br>
   <button onclick="testAll()" style="background: #388a34;">测试全部文件</button>
+  <button onclick="testInit()" style="background: #b5890b;">测试 init()</button>
   <button onclick="document.getElementById('output').innerHTML=''" style="background: #c53030;">清空输出</button>
 
   <div id="output"></div>
@@ -39,67 +34,14 @@
       output.appendChild(div);
     }
 
-    async function fetchAndEval(url) {
-      log(`📥 下载: ${url}`, 'info');
-      try {
-        const resp = await fetch(url);
-        if (!resp.ok) {
-          log(`❌ HTTP ${resp.status}: ${url}`, 'error');
-          return false;
-        }
-        const code = await resp.text();
-        log(`✅ 下载成功 (${code.length} bytes)`, 'success');
-
-        log(`🔧 执行中...`, 'info');
-        try {
-          eval(code);
-          log(`✅ 执行成功: ${url}`, 'success');
-          return true;
-        } catch(e) {
-          log(`❌ 执行失败: ${url}`, 'error');
-          log(`错误: ${e.message}`, 'error');
-          log(`堆栈:\n${e.stack}`, 'error');
-          return false;
-        }
-      } catch(e) {
-        log(`❌ 下载失败: ${e.message}`, 'error');
-        return false;
-      }
-    }
-
-    async function testFile(url) {
-      log(`\n========== 测试 ${url} ==========`, 'info');
-      const success = await fetchAndEval(url);
-
-      if (success) {
-        log(`\n🔎 检查导出:`, 'info');
-        // 检查常见变量
-        const checks = [
-          'TOPIC_KEYWORDS',
-          'selectRecommendDigestItems',
-          'getDigestLabel',
-          'updateReadingStats',
-          'checkMilestones',
-          'getWeeklyReport',
-          'createInitController',
-          'state',
-          'Recommender',
-          'init'
-        ];
-
-        checks.forEach(name => {
-          try {
-            const val = eval(name);
-            const type = typeof val;
-            if (type !== 'undefined') {
-              log(`  ✅ ${name}: ${type}`, 'success');
-            }
-          } catch(e) {
-            // 未定义，跳过
-          }
-        });
-      }
-    }
+    // 捕获所有未处理的错误
+    window.onerror = function(msg, url, line, col, error) {
+      log('❌ 全局错误: ' + msg + '\n  文件: ' + url + '\n  行: ' + line, 'error');
+      return true;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      log('❌ 未处理的 Promise 拒绝: ' + e.reason, 'error');
+    });
 
     async function testAll() {
       log('\n🚀 开始测试所有文件...\n', 'info');
@@ -113,17 +55,75 @@
       ];
 
       for (const file of files) {
-        const success = await testFile(file);
-        if (!success) {
-          log(`\n⚠️ ${file} 失败，停止测试后续文件`, 'warn');
-          break;
+        log(`========== ${file} ==========`, 'info');
+        try {
+          const resp = await fetch(file);
+          if (!resp.ok) {
+            log(`❌ HTTP ${resp.status}`, 'error');
+            continue;
+          }
+          const code = await resp.text();
+          log(`📥 下载成功 (${code.length} bytes)`, 'success');
+
+          try {
+            eval(code);
+            log(`✅ 执行成功`, 'success');
+          } catch(e) {
+            log(`❌ 执行失败: ${e.message}`, 'error');
+            if (e.stack) log(e.stack, 'error');
+          }
+        } catch(e) {
+          log(`❌ 下载失败: ${e.message}`, 'error');
         }
       }
 
-      log('\n✅ 测试完成', 'success');
+      // 检查关键函数
+      log('\n========== 变量检查 ==========', 'info');
+      const checks = ['TOPIC_KEYWORDS','selectRecommendDigestItems','getDigestLabel',
+        'updateReadingStats','checkMilestones','getWeeklyReport','createInitController',
+        'state','Recommender','init','renderTab','buildHybridFeed','scoreCandidate',
+        'calculateMMR','openReader','shareItem','generateShareCard'];
+      for (const name of checks) {
+        try {
+          const type = typeof eval(name);
+          log(`  ✅ ${name}: ${type}`, 'success');
+        } catch(e) {
+          log(`  ❌ ${name}: undefined`, 'error');
+        }
+      }
+
+      // 测试调用 init
+      log('\n========== 测试 init() ==========', 'info');
+      try {
+        await init();
+        log('✅ init() 完成', 'success');
+        log(`state.currentTab: ${state.currentTab}`, 'info');
+        log(`state.articles.length: ${state.articles.length}`, 'info');
+        log(`state.hotItems.length: ${state.hotItems.length}`, 'info');
+        log(`state.sources.length: ${state.sources.length}`, 'info');
+        log(`骨架屏移除: ${!document.getElementById('skeletonLoader')}`, 'info');
+      } catch(e) {
+        log(`❌ init() 失败: ${e.message}`, 'error');
+        if (e.stack) log(e.stack, 'error');
+      }
+
+      log('\n✅ 诊断完成', 'success');
     }
 
-    log('💡 点击按钮测试单个文件，或点击"测试全部文件"', 'info');
+    async function testInit() {
+      log('\n🧪 直接测试 init()...\n', 'info');
+      try {
+        log('state 存在: ' + (typeof state === 'object'), 'info');
+        log('init 存在: ' + (typeof init === 'function'), 'info');
+        await init();
+        log('✅ init() 完成', 'success');
+      } catch(e) {
+        log(`❌ ${e.message}`, 'error');
+        if (e.stack) log(e.stack, 'error');
+      }
+    }
+
+    log('💡 点击"测试全部文件"开始诊断', 'info');
   </script>
 </body>
 </html>
