@@ -185,13 +185,7 @@ async function doRefresh() {
 
 // ── Recommender (ported from HotApp) ──
 
-// TOPIC_KEYWORDS 已移至 topic-keywords.js 单独文件，避免跨文件 const 重复声明
-// 浏览器中由 topic-keywords.js 提供，Node.js 测试中需 require
-if (typeof TOPIC_KEYWORDS === 'undefined') {
-  if (typeof require !== 'undefined') {
-    var TOPIC_KEYWORDS = require('./topic-keywords');
-  }
-}
+// TOPIC_KEYWORDS 由 topic-keywords.js 提供（浏览器中通过 <script> 标签加载）
 
 function Recommender() {
   this.interests = [];

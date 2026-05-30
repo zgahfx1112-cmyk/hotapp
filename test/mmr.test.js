@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+// 先加载 TOPIC_KEYWORDS 到全局
+global.TOPIC_KEYWORDS = require('../public/topic-keywords');
 const { calculateMMR, reduceRandomness } = require('../public/app');
 
 // ── reduceRandomness ──

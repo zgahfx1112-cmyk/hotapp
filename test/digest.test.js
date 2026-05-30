@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 // TOPIC_KEYWORDS 已移至独立文件，测试时先加载它
-require('../public/topic-keywords');
+global.TOPIC_KEYWORDS = require('../public/topic-keywords');
 const { selectRecommendDigestItems, getDigestLabel } = require('../public/digest');
 
 test('selectRecommendDigestItems only keeps toutiao baidu weibo and limits to five', () => {

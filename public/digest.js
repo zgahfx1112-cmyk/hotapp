@@ -1,10 +1,4 @@
-// TOPIC_KEYWORDS 定义在 topic-keywords.js 中
-// Node.js 测试环境需显式 require
-if (typeof TOPIC_KEYWORDS === 'undefined') {
-  if (typeof require !== 'undefined') {
-    var TOPIC_KEYWORDS = require('./topic-keywords');
-  }
-}
+// TOPIC_KEYWORDS 由 topic-keywords.js 提供（浏览器中通过 <script> 标签加载）
 
 function matchInterests(title, interests) {
   if (!interests || !interests.length) return false;
