@@ -665,6 +665,7 @@ function feedInit() {
   state.feedPage = 0;
   state.feedLoading = false;
   state.feedExhausted = false;
+  state.feedShownIds = new Set();
   $('#feedGrid').innerHTML = '';
 
   if (state.feedObserver) state.feedObserver.disconnect();
@@ -684,9 +685,11 @@ function loadFeedPage() {
   state.feedLoading = true;
   $('#feedLoading').style.display = 'block';
 
-  const start = state.feedPage * 10;
-  const end = start + 10;
-  const batch = state.feedItems.slice(start, end);
+  if (!state.feedShownIds) state.feedShownIds = new Set();
+
+  // 过滤已展示，从剩余列表头部取
+  const remaining = state.feedItems.filter(item => !state.feedShownIds.has(item.id));
+  const batch = remaining.slice(0, 10);
 
   if (!batch.length) {
     state.feedExhausted = true;
@@ -704,7 +707,8 @@ function loadFeedPage() {
       'linear-gradient(135deg,#fccb90,#d57eeb)','linear-gradient(135deg,#96fbc4,#f9f586)',
     ];
     batch.forEach((item, i) => {
-      const g = gradients[(start + i) % gradients.length];
+      state.feedShownIds.add(item.id);
+      const g = gradients[(state.feedPage * 10 + i) % gradients.length];
       const SOURCE_ICONS = { '头条':'📰','微博':'🔥','百度':'🔍','知乎':'💡','虎扑':'🏀','IT之家':'💻','36氪':'💰','虎嗅':'📊','少数派':'⚡','贴吧':'💬','GitHub':'🐙','V2EX':'💬' };
       const icon = SOURCE_ICONS[item.source] || (item.type === 'hot' ? '🔥' : '📝');
       const imgHtml = item.image
@@ -738,6 +742,8 @@ function loadFeedPage() {
         card.classList.add('fade-out');
         setTimeout(() => { card.remove(); }, 300);
         state.feedItems = buildHybridFeed();
+        state.feedPage = 0;
+        state.feedExhausted = false;
         const kw = titleKws.length ? titleKws[0] : item.title.slice(0, 10);
         showToast(`已减少"${kw}"相关内容`);
       });
