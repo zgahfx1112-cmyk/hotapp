@@ -12,6 +12,24 @@
 </head>
 <body>
 
+<!-- 强制清除旧版 Service Worker 缓存，确保加载最新代码 -->
+<script>
+(function() {
+  // 清除所有缓存
+  if ('caches' in window) {
+    caches.keys().then(function(names) {
+      names.forEach(function(name) { caches.delete(name); });
+    });
+  }
+  // 注销所有 Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      regs.forEach(function(reg) { reg.unregister(); });
+    });
+  }
+})();
+</script>
+
 <header class="header">
   <div class="header-inner">
     <div class="header-left">
