@@ -2259,21 +2259,36 @@ function setupBrowserEvents() {
     }
   }, { passive: true });
 
-  $('#btnRefresh').addEventListener('click', doRefresh);
-  $('#topBtn').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-  window.addEventListener('scroll', () => {
-    $('#topBtn').classList.toggle('hidden', window.scrollY < 300);
-  }, { passive: true });
-
-  $('#btnTheme').addEventListener('click', toggleTheme);
-
+  // 等待 DOM 加载完成后再绑定元素事件
   document.addEventListener('DOMContentLoaded', () => {
+    const btnRefresh = $('#btnRefresh');
+    if (btnRefresh) {
+      btnRefresh.addEventListener('click', doRefresh);
+    }
+
+    const topBtn = $('#topBtn');
+    if (topBtn) {
+      topBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    }
+
+    const btnTheme = $('#btnTheme');
+    if (btnTheme) {
+      btnTheme.addEventListener('click', toggleTheme);
+    }
+
     if (typeof createInitController === 'undefined') {
       console.error('Init controller missing');
       return;
     }
     init();
   });
+
+  window.addEventListener('scroll', () => {
+    const topBtn = $('#topBtn');
+    if (topBtn) {
+      topBtn.classList.toggle('hidden', window.scrollY < 300);
+    }
+  }, { passive: true });
 }
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined') {
