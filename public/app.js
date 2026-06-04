@@ -707,12 +707,26 @@ function showShareCardModal(item) {
 
   document.body.appendChild(modal);
 
-  // Event handlers
-  const closeModal = () => modal.remove();
+  // Event handlers — push history so mobile back button closes modal
+  let shareClosed = false;
+  const closeModal = () => {
+    if (shareClosed) return;
+    shareClosed = true;
+    window.removeEventListener('popstate', onPopState);
+    modal.remove();
+  };
+  const onPopState = () => closeModal();
+  history.pushState({ share: true }, '');
+  window.addEventListener('popstate', onPopState);
 
-  modal.querySelector('.share-modal-close').addEventListener('click', closeModal);
+  const closeAndBack = () => {
+    closeModal();
+    if (history.state && history.state.share) history.back();
+  };
+
+  modal.querySelector('.share-modal-close').addEventListener('click', closeAndBack);
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeModal();
+    if (e.target === modal) closeAndBack();
   });
 
   modal.querySelector('[data-action="copy-link"]').addEventListener('click', async () => {
