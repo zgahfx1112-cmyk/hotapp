@@ -423,14 +423,29 @@ async function openReader(article) {
   document.body.appendChild(overlay);
   document.body.style.overflow = 'hidden';
 
-  // Close handlers
+  // Push history so mobile back button closes reader instead of leaving page
+  let readerClosed = false;
   const close = () => {
+    if (readerClosed) return;
+    readerClosed = true;
+    window.removeEventListener('popstate', onPopState);
     overlay.remove();
     document.body.style.overflow = '';
   };
-  overlay.querySelector('.reader-close').addEventListener('click', close);
+  const onPopState = () => close();
+  history.pushState({ reader: true }, '');
+  window.addEventListener('popstate', onPopState);
+
+  overlay.querySelector('.reader-close').addEventListener('click', () => {
+    close();
+    // Consume the history entry so browser doesn't think there's a page to go back to
+    if (history.state && history.state.reader) history.back();
+  });
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
+    if (e.target === overlay) {
+      close();
+      if (history.state && history.state.reader) history.back();
+    }
   });
 
   // Font size controls
