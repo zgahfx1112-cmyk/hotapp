@@ -743,7 +743,7 @@ function showShareCardModal(item) {
   });
 
   modal.querySelector('[data-action="download"]').addEventListener('click', () => {
-    downloadShareCard(modal.querySelector('.share-card'), item.title);
+    downloadShareCard(modal.querySelector('.share-card'), item.title, item);
   });
 
   const nativeShareBtn = modal.querySelector('[data-action="native-share"]');
@@ -765,34 +765,64 @@ function showShareCardModal(item) {
   }
 }
 
-function downloadShareCard(cardElement, title) {
-  // Create a canvas to render the card
+function downloadShareCard(cardElement, title, item) {
+  // 手机端：尝试使用 html2canvas（如果存在）或简单的 blob 下载
+  if (!cardElement) {
+    showToast('分享卡片未找到');
+    return;
+  }
+
+  // 尝试使用 html2canvas（如果已加载）
+  if (typeof html2canvas !== 'undefined') {
+    html2canvas(cardElement, { scale: 2, useCORS: true }).then(canvas => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          showToast('图片生成失败');
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${title || '分享'}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('图片已下载');
+      }, 'image/png');
+    }).catch(err => {
+      console.error('html2canvas failed:', err);
+      fallbackDownload(cardElement, title, item);
+    });
+  } else {
+    fallbackDownload(cardElement, title, item);
+  }
+}
+
+function fallbackDownload(cardElement, title, item) {
+  // 回退方案：使用 Canvas API 手动绘制
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-
-  // Set canvas size (2x for retina)
   const scale = 2;
   canvas.width = 800 * scale;
   canvas.height = 1000 * scale;
   ctx.scale(scale, scale);
 
-  // Draw background
+  // 绘制背景
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, 800, 1000);
 
-  // Draw header
+  // 绘制头部
   ctx.fillStyle = '#4f6ef6';
   ctx.fillRect(0, 0, 800, 60);
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 24px sans-serif';
   ctx.fillText('今日热榜', 30, 40);
 
-  // Draw source
+  // 绘制来源
   ctx.fillStyle = '#666666';
   ctx.font = '16px sans-serif';
   ctx.fillText(item.source || '未知来源', 30, 100);
 
-  // Draw title
+  // 绘制标题
   ctx.fillStyle = '#1a1a1a';
   ctx.font = 'bold 32px sans-serif';
   const titleLines = wrapText(ctx, title || '无标题', 740);
@@ -802,7 +832,7 @@ function downloadShareCard(cardElement, title) {
     y += 40;
   });
 
-  // Draw summary if exists
+  // 绘制摘要
   if (item.summary) {
     y += 20;
     ctx.fillStyle = '#666666';
@@ -814,7 +844,7 @@ function downloadShareCard(cardElement, title) {
     });
   }
 
-  // Draw QR code area
+  // 绘制二维码区域
   const qrY = 850;
   ctx.fillStyle = '#f5f5f5';
   ctx.fillRect(30, qrY, 740, 120);
@@ -822,16 +852,22 @@ function downloadShareCard(cardElement, title) {
   ctx.font = '14px sans-serif';
   ctx.fillText('扫码查看详情', 180, qrY + 65);
 
-  // Convert to blob and download
+  // 下载
   canvas.toBlob((blob) => {
+    if (!blob) {
+      showToast('图片生成失败');
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${title || '分享'}.png`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast('图片已下载');
-  });
+  }, 'image/png');
 }
 
 function wrapText(ctx, text, maxWidth) {
