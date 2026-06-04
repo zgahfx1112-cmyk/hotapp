@@ -766,108 +766,197 @@ function showShareCardModal(item) {
 }
 
 function downloadShareCard(cardElement, title, item) {
-  // 手机端：尝试使用 html2canvas（如果存在）或简单的 blob 下载
   if (!cardElement) {
     showToast('分享卡片未找到');
     return;
   }
 
-  // 尝试使用 html2canvas（如果已加载）
-  if (typeof html2canvas !== 'undefined') {
-    html2canvas(cardElement, { scale: 2, useCORS: true }).then(canvas => {
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          showToast('图片生成失败');
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${title || '分享'}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('图片已下载');
-      }, 'image/png');
-    }).catch(err => {
-      console.error('html2canvas failed:', err);
-      fallbackDownload(cardElement, title, item);
+  // 等待卡片内的图片加载完毕再截图
+  const imgs = cardElement.querySelectorAll('img');
+  const imgPromises = Array.from(imgs).map(img => {
+    if (img.complete) return Promise.resolve();
+    return new Promise(resolve => {
+      img.addEventListener('load', resolve);
+      img.addEventListener('error', resolve);
     });
-  } else {
-    fallbackDownload(cardElement, title, item);
-  }
+  });
+
+  Promise.all(imgPromises).then(() => {
+    if (typeof html2canvas !== 'undefined') {
+      html2canvas(cardElement, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null
+      }).then(canvas => {
+        canvas.toBlob((blob) => {
+          if (!blob) { showToast('图片生成失败'); return; }
+          triggerDownload(blob, title);
+        }, 'image/png');
+      }).catch(err => {
+        console.error('html2canvas failed:', err);
+        fallbackDownload(cardElement, title, item);
+      });
+    } else {
+      fallbackDownload(cardElement, title, item);
+    }
+  });
+}
+
+function triggerDownload(blob, title) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(title || '分享').replace(/[\\/:*?"<>|]/g, '')}.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('图片已保存');
 }
 
 function fallbackDownload(cardElement, title, item) {
-  // 回退方案：使用 Canvas API 手动绘制
+  // 回退方案：使用 Canvas API 还原卡片样式
+  const W = 400, H = 600;
+  const scale = 2;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  const scale = 2;
-  canvas.width = 800 * scale;
-  canvas.height = 1000 * scale;
+  canvas.width = W * scale;
+  canvas.height = H * scale;
   ctx.scale(scale, scale);
 
-  // 绘制背景
+  // 1. 渐变背景 (与 CSS 一致)
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#667eea');
+  grad.addColorStop(1, '#764ba2');
+  ctx.fillStyle = grad;
+  roundRect(ctx, 0, 0, W, H, 12);
+  ctx.fill();
+
+  let y = 30;
+
+  // 2. 来源标签
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  const srcText = item.source || '今日热榜';
+  ctx.font = '13px sans-serif';
+  const srcW = ctx.measureText(srcText).width + 24;
+  roundRect(ctx, 20, y, srcW, 28, 12);
+  ctx.fill();
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, 800, 1000);
+  ctx.fillText(srcText, 32, y + 19);
+  y += 45;
 
-  // 绘制头部
-  ctx.fillStyle = '#4f6ef6';
-  ctx.fillRect(0, 0, 800, 60);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 24px sans-serif';
-  ctx.fillText('今日热榜', 30, 40);
-
-  // 绘制来源
-  ctx.fillStyle = '#666666';
-  ctx.font = '16px sans-serif';
-  ctx.fillText(item.source || '未知来源', 30, 100);
-
-  // 绘制标题
-  ctx.fillStyle = '#1a1a1a';
-  ctx.font = 'bold 32px sans-serif';
-  const titleLines = wrapText(ctx, title || '无标题', 740);
-  let y = 150;
-  titleLines.forEach(line => {
-    ctx.fillText(line, 30, y);
-    y += 40;
-  });
-
-  // 绘制摘要
-  if (item.summary) {
-    y += 20;
-    ctx.fillStyle = '#666666';
-    ctx.font = '18px sans-serif';
-    const summaryLines = wrapText(ctx, item.summary.substring(0, 150), 740);
-    summaryLines.forEach(line => {
-      ctx.fillText(line, 30, y);
-      y += 28;
-    });
-  }
-
-  // 绘制二维码区域
-  const qrY = 850;
-  ctx.fillStyle = '#f5f5f5';
-  ctx.fillRect(30, qrY, 740, 120);
-  ctx.fillStyle = '#666666';
-  ctx.font = '14px sans-serif';
-  ctx.fillText('扫码查看详情', 180, qrY + 65);
-
-  // 下载
-  canvas.toBlob((blob) => {
-    if (!blob) {
-      showToast('图片生成失败');
-      return;
+  // 3. 新闻图片
+  const drawRest = (newsImg) => {
+    if (newsImg) {
+      const imgW = W - 40, imgH = 180;
+      ctx.save();
+      roundRect(ctx, 20, y, imgW, imgH, 8);
+      ctx.clip();
+      ctx.drawImage(newsImg, 20, y, imgW, imgH);
+      ctx.restore();
+      y += imgH + 15;
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title || '分享'}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('图片已下载');
-  }, 'image/png');
+
+    // 4. 标题
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 18px sans-serif';
+    const titleLines = wrapText(ctx, title || '无标题', W - 40);
+    titleLines.forEach(line => {
+      ctx.fillText(line, 20, y);
+      y += 26;
+    });
+    y += 8;
+
+    // 5. 摘要
+    if (item.summary) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = '14px sans-serif';
+      const sumLines = wrapText(ctx, item.summary.substring(0, 100), W - 40);
+      sumLines.forEach(line => {
+        ctx.fillText(line, 20, y);
+        y += 20;
+      });
+    }
+
+    // 6. 底部：二维码 + 扫码文字
+    const footerY = H - 100;
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(20, footerY - 10);
+    ctx.lineTo(W - 20, footerY - 10);
+    ctx.stroke();
+
+    // 二维码白底
+    const qrSize = 70;
+    ctx.fillStyle = '#ffffff';
+    roundRect(ctx, 20, footerY, qrSize, qrSize, 8);
+    ctx.fill();
+
+    // 绘制 QR SVG 到 canvas
+    const qrSvg = generateQRCode(item.url || '');
+    const qrBlob = new Blob([qrSvg], { type: 'image/svg+xml' });
+    const qrUrl = URL.createObjectURL(qrBlob);
+    const qrImg = new Image();
+    qrImg.onload = () => {
+      ctx.drawImage(qrImg, 26, footerY + 6, qrSize - 12, qrSize - 12);
+      URL.revokeObjectURL(qrUrl);
+
+      // 扫码文字
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('扫码查看详情', 110, footerY + 30);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.font = '13px sans-serif';
+      ctx.fillText(item.url ? item.url.substring(0, 30) : '', 110, footerY + 52);
+
+      // 导出下载
+      canvas.toBlob((blob) => {
+        if (!blob) { showToast('图片生成失败'); return; }
+        triggerDownload(blob, title);
+      }, 'image/png');
+    };
+    qrImg.onerror = () => {
+      // QR 加载失败也要导出
+      ctx.fillStyle = '#666';
+      ctx.font = '12px sans-serif';
+      ctx.fillText('QR', 40, footerY + 42);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('扫码查看详情', 110, footerY + 35);
+      canvas.toBlob((blob) => {
+        if (!blob) { showToast('图片生成失败'); return; }
+        triggerDownload(blob, title);
+      }, 'image/png');
+    };
+    qrImg.src = qrUrl;
+  };
+
+  // 加载新闻图片
+  if (item.image) {
+    const newsImg = new Image();
+    newsImg.crossOrigin = 'anonymous';
+    newsImg.onload = () => drawRest(newsImg);
+    newsImg.onerror = () => drawRest(null);
+    newsImg.src = item.image;
+  } else {
+    drawRest(null);
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 function wrapText(ctx, text, maxWidth) {
