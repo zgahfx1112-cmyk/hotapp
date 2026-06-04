@@ -422,6 +422,7 @@ async function openReader(article) {
 
   document.body.appendChild(overlay);
   document.body.style.overflow = 'hidden';
+  document.body.style.overscrollBehaviorY = 'none';
 
   // Push history so mobile back button closes reader instead of leaving page
   let readerClosed = false;
@@ -431,6 +432,7 @@ async function openReader(article) {
     window.removeEventListener('popstate', onPopState);
     overlay.remove();
     document.body.style.overflow = '';
+    document.body.style.overscrollBehaviorY = '';
   };
   const onPopState = () => close();
   history.pushState({ reader: true }, '');
@@ -2288,7 +2290,7 @@ const PTR_THRESHOLD = 80;
 
 function setupBrowserEvents() {
   document.addEventListener('touchstart', (e) => {
-    if (window.scrollY > 10) return;
+    if (window.scrollY > 10 || document.querySelector('.reader-overlay')) return;
     ptrState.startY = e.touches[0].clientY;
     ptrState.pulling = true;
     ptrState.moved = false;
