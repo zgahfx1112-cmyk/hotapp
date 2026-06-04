@@ -219,6 +219,7 @@ body {
 .feed-card { position: relative; padding: 16px; background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius); cursor: pointer; transition: var(--transition);
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  -webkit-tap-highlight-color: transparent;
 }
 .feed-card:hover { border-color: var(--accent); background: var(--bg-hover); box-shadow: 0 4px 16px rgba(0,0,0,0.14); transform: translateY(-2px); }
 .feed-card .btn-star { position: absolute; bottom: 12px; right: 12px; width: 34px; height: 34px; border: none; background: rgba(255,255,255,0.92); border-radius: 50%; cursor: pointer; font-size: 17px; display: flex; align-items: center; justify-content: center; z-index: 2; opacity: 1; transition: var(--transition); line-height: 1; color: #bbb; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
@@ -407,10 +408,13 @@ body {
   padding: 4px 10px; border-radius: 4px; border: none;
   background: transparent; color: var(--text-muted); cursor: pointer;
   font-size: 12px; transition: var(--transition); line-height: 1;
+  -webkit-tap-highlight-color: transparent;
 }
 .card-action-btn:hover { color: var(--accent); background: var(--bg-hover); }
+.card-action-btn:active { color: var(--accent); background: var(--bg-hover); transform: scale(0.95); }
 .card-action-btn.active { color: #f0a030; }
 .card-action-btn.active:hover { color: #f0a030; }
+.card-action-muted:active { color: var(--red); background: rgba(255,0,0,0.06); }
 .card-action-muted:hover { color: var(--red); }
 
 /* ── Bookmark checkbox ── */
