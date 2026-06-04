@@ -4,7 +4,6 @@ function createInitController(deps) {
       deps.restorePrefs();
       deps.initTheme();
       deps.renderTab();
-      deps.renderInterestTags();
       deps.setupTabs();
       deps.registerSW();
 
