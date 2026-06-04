@@ -1405,14 +1405,12 @@ function renderSubTabs(items, activeKey, onClick, showAll = true) {
 function renderRecommendTab() {
   const area = $('#contentArea');
 
-  // 首次加载：保留骨架屏，在骨架屏后渲染兴趣标签
+  // 首次加载：保留骨架屏，不渲染兴趣标签避免闪烁
   if (state.initialLoad && $('#skeletonLoader')) {
-    renderInterestTags();
     return;
   }
 
   const digestHtml = renderDailyDigest();
-  renderInterestTags();
 
   if (!state.feedItems.length) {
     state.feedItems = buildHybridFeed();
