@@ -706,6 +706,8 @@ function showShareCardModal(item) {
   }
 
   document.body.appendChild(modal);
+  document.body.style.overflow = 'hidden';
+  document.body.style.overscrollBehaviorY = 'none';
 
   // Event handlers — push history so mobile back button closes modal
   let shareClosed = false;
@@ -714,6 +716,8 @@ function showShareCardModal(item) {
     shareClosed = true;
     window.removeEventListener('popstate', onPopState);
     modal.remove();
+    document.body.style.overflow = '';
+    document.body.style.overscrollBehaviorY = '';
   };
   const onPopState = () => closeModal();
   history.pushState({ share: true }, '');
