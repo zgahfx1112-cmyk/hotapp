@@ -1484,9 +1484,12 @@ function renderDailyDigest() {
   const label = getDigestLabel();
   const items = top5.map((h, i) => {
     const plat = getPlatformName(h.platform);
-    return `<div class="digest-item" onclick="window.open('${escapeHtml(h.url || '#')}','_blank')">
+    const isRead = isArticleRead({ title: h.title, url: h.url }, state.recommender.history);
+    const readClass = isRead ? ' read' : '';
+    const readBadge = isRead ? '<span class="read-badge">✓已读</span>' : '';
+    return `<div class="digest-item${readClass}" data-title="${escapeHtml(h.title)}" data-url="${escapeHtml(h.url || '')}" onclick="markDigestRead(this);window.open('${escapeHtml(h.url || '#')}','_blank')">
       <span class="rank-num ${i === 0 ? 'top1' : (i < 3 ? 'top3' : '')}" style="font-size:14px;min-width:20px">${i + 1}</span>
-      <span class="digest-title">${escapeHtml(h.title)}</span>
+      <span class="digest-title">${escapeHtml(h.title)}${readBadge}</span>
       <span class="platform-badge ${h.platform}" style="flex-shrink:0">${plat}</span>
     </div>`;
   }).join('');
@@ -1495,6 +1498,20 @@ function renderDailyDigest() {
     <div class="digest-header">${label}</div>
     ${items}
   </div>`;
+}
+
+function markDigestRead(el) {
+  if (!el) return;
+  el.classList.add('read');
+  const titleEl = el.querySelector('.digest-title');
+  if (titleEl && !titleEl.querySelector('.read-badge')) {
+    titleEl.insertAdjacentHTML('beforeend', '<span class="read-badge">✓已读</span>');
+  }
+  const title = el.dataset.title;
+  const url = el.dataset.url;
+  if (title && state.recommender) {
+    state.recommender.recordView({ title, url: url || '', type: 'hot' });
+  }
 }
 
 // ── Tab rendering ──
@@ -1615,16 +1632,22 @@ function loadFeedPage() {
       // Check if item has been read
       const isRead = isArticleRead({ title: item.title, url: item.url }, state.recommender.history);
       const readClass = isRead ? ' read' : '';
-      const unreadBadge = isRead ? '' : '<span class="unread-badge">未读</span>';
+      const readBadge = isRead ? '<span class="read-badge">✓已读</span>' : '<span class="unread-badge">未读</span>';
 
       const card = document.createElement('div');
       card.className = 'feed-card' + readClass;
       card.classList.add('fade-in');
       const starred = isBookmarked(item.id);
-      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}${unreadBadge}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, readLater: { id: item.id, title: item.title, url: item.url, source: item.source, type: item.type, image: item.image }, hide: true })}`;
+      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}${readBadge}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, readLater: { id: item.id, title: item.title, url: item.url, source: item.source, type: item.type, image: item.image }, hide: true })}`;
       card.addEventListener('click', (e) => {
         if (e.target.closest('.card-action-btn')) return;
         state.recommender.recordView(item);
+        card.classList.add('read');
+        const titleEl = card.querySelector('.feed-title');
+        if (titleEl) {
+          const badge = titleEl.querySelector('.unread-badge, .read-badge');
+          if (badge) { badge.className = 'read-badge'; badge.textContent = '✓已读'; }
+        }
         if (item.type === 'rss') {
           // RSS文章打开阅读视图
           openReader({
@@ -1770,12 +1793,15 @@ function renderHotList() {
     const pct = Math.round((item.heatScore / maxHeat) * 100);
     const bmId = 'h_' + item.id;
     const starred = isBookmarked(bmId);
+    const isRead = isArticleRead({ title: item.title, url: item.url }, state.recommender.history);
+    const readClass = isRead ? ' read' : '';
+    const readBadge = isRead ? '<span class="read-badge">✓已读</span>' : '';
     const div = document.createElement('div');
-    div.className = 'trending-item';
+    div.className = 'trending-item' + readClass;
     div.dataset.id = item.id;
     div.innerHTML = `<span class="rank-num ${rc}">${idx + 1}</span>
       <div class="trending-info">
-        <div class="trending-title">${escapeHtml(item.title)}</div>
+        <div class="trending-title">${escapeHtml(item.title)}${readBadge}</div>
         <div class="trending-meta">
           <span class="platform-badge ${item.platform}">${getPlatformName(item.platform)}</span>
           <span>🔥 ${formatNumber(item.heatScore)}</span>
@@ -1787,7 +1813,15 @@ function renderHotList() {
     div.addEventListener('click', (e) => {
       if (e.target.closest('.card-action-btn')) return;
       const found = state.hotItems.find(x => String(x.id) === div.dataset.id);
-      if (found) { state.recommender.recordView(found); if (found.url) window.open(found.url, '_blank'); }
+      if (found) {
+        state.recommender.recordView(found);
+        div.classList.add('read');
+        const titleEl = div.querySelector('.trending-title');
+        if (titleEl && !titleEl.querySelector('.read-badge')) {
+          titleEl.insertAdjacentHTML('beforeend', '<span class="read-badge">✓已读</span>');
+        }
+        if (found.url) window.open(found.url, '_blank');
+      }
     });
     div.querySelector('[data-action="share"]').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1861,7 +1895,7 @@ function renderRssList() {
     const summary = a.summary ? a.summary.replace(/<[^>]*>/g, '').trim() : '';
     const isRead = isArticleRead({ title: a.title, url: a.link }, state.recommender.history);
     const readClass = isRead ? ' read' : '';
-    const unreadBadge = isRead ? '' : '<span class="unread-badge">未读</span>';
+    const readBadge = isRead ? '<span class="read-badge">✓已读</span>' : '<span class="unread-badge">未读</span>';
 
     return `<article class="rss-article-card${readClass}" data-bmid="${bmId}" data-aid="${a.id}">
       ${img}
@@ -1869,7 +1903,7 @@ function renderRssList() {
         <span class="source-badge">${escapeHtml(a.source_name)}</span>
         <span class="card-time">${formatTime(a.pub_date)}</span>
       </div>
-      <h3 class="card-title">${escapeHtml(a.title)}${unreadBadge}</h3>
+      <h3 class="card-title">${escapeHtml(a.title)}${readBadge}</h3>
       ${summary ? `<p class="card-summary card-summary-clamp" data-expanded="false">${escapeHtml(summary)}</p><button class="summary-toggle">展开全文</button>` : ''}
       ${buildCardActions({ share: true, bookmark: { starred, bmid: bmId }, readLater: { id: bmId, title: a.title, url: a.link, source: a.source_name, type: 'rss', image: a.image_url } })}
     </article>`;
@@ -1925,6 +1959,13 @@ function renderRssList() {
       const aid = card.dataset.aid;
       const a = state.articles.find(x => String(x.id) === aid);
       if (a) {
+        state.recommender.recordView({ title: a.title, url: a.link || '', type: 'rss' });
+        card.classList.add('read');
+        const titleEl = card.querySelector('.card-title');
+        if (titleEl) {
+          const badge = titleEl.querySelector('.unread-badge, .read-badge');
+          if (badge) { badge.className = 'read-badge'; badge.textContent = '✓已读'; }
+        }
         openReader({
           id: 'rss_' + a.id,
           title: a.title,

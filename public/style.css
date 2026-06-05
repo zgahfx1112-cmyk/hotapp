@@ -588,11 +588,27 @@ body {
 
 /* ── Unread/Read states ── */
 
-.feed-card.read, .rss-article-card.read {
-  opacity: 0.6;
+.feed-card.read, .rss-article-card.read, .trending-item.read, .digest-item.read {
+  opacity: 0.55;
+  transition: opacity 0.3s ease;
 }
-.feed-card.read .feed-title, .rss-article-card.read .card-title {
+.feed-card.read .feed-title,
+.rss-article-card.read .card-title,
+.trending-item.read .trending-title,
+.digest-item.read .digest-title {
   color: var(--text-muted);
+}
+.trending-item.read {
+  background: var(--bg-hover);
+}
+.trending-item.read:hover, .digest-item.read:hover {
+  opacity: 0.75;
+}
+.trending-item.read .rank-num {
+  color: var(--text-muted);
+}
+.digest-item.read {
+  opacity: 0.55;
 }
 
 .unread-badge {
@@ -605,6 +621,18 @@ body {
   font-weight: 600;
   margin-left: 6px;
   vertical-align: middle;
+}
+.read-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--text-muted);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 6px;
+  vertical-align: middle;
+  opacity: 0.85;
 }
 
 /* Summary preview on hover */
