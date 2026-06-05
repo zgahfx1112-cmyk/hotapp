@@ -11,18 +11,32 @@ function matchInterests(title, interests) {
   return false;
 }
 
-function selectRecommendDigestItems(hotItems, interests) {
+function selectRecommendDigestItems(hotItems, interests, history) {
   const allowedPlatforms = new Set(['toutiao', 'baidu', 'weibo']);
   const filtered = (hotItems || []).filter(item => allowedPlatforms.has(item.platform));
+
+  // 判断是否已读（轻量版，避免依赖 app.js 的 isArticleRead）
+  const isRead = (item) => {
+    if (!history || !history.length) return false;
+    return history.some(h =>
+      (item.url && h.url && item.url === h.url) ||
+      (item.title && h.title && item.title === h.title)
+    );
+  };
 
   // 如果提供了兴趣标签，优先展示匹配的内容
   if (interests && interests.length > 0) {
     const matched = filtered.filter(item => matchInterests(item.title, interests));
     const unmatched = filtered.filter(item => !matchInterests(item.title, interests));
-    return [...matched, ...unmatched].slice(0, 5);
+    const combined = [...matched, ...unmatched];
+    const unread = combined.filter(item => !isRead(item));
+    const read = combined.filter(item => isRead(item));
+    return [...unread, ...read].slice(0, 5);
   }
 
-  return filtered.slice(0, 5);
+  const unread = filtered.filter(item => !isRead(item));
+  const read = filtered.filter(item => isRead(item));
+  return [...unread, ...read].slice(0, 5);
 }
 
 function getDigestLabel(hour) {

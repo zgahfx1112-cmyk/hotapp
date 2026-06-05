@@ -1478,7 +1478,7 @@ function buildHybridFeed() {
 // ── Daily Digest ──
 
 function renderDailyDigest() {
-  const top5 = selectRecommendDigestItems(state.hotItems, state.recommender.interests);
+  const top5 = selectRecommendDigestItems(state.hotItems, state.recommender.interests, state.recommender.history);
   if (!top5.length) return '';
 
   const label = getDigestLabel();
@@ -1773,6 +1773,21 @@ function renderHotList() {
     return;
   }
 
+  // 已读沉底：未读在前，已读在后（稳定排序，保持同类内原有热度顺序）
+  const history = state.recommender.history;
+  if (history && history.length > 0) {
+    const unread = [];
+    const read = [];
+    for (const item of items) {
+      if (isArticleRead({ title: item.title, url: item.url }, history)) {
+        read.push(item);
+      } else {
+        unread.push(item);
+      }
+    }
+    items = [...unread, ...read];
+  }
+
   const pageSize = 20;
   const start = state.hotPage * pageSize;
   const end = start + pageSize;
@@ -1886,6 +1901,21 @@ function renderRssList() {
   if (!items.length) {
     list.innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>暂无文章</p><p style="font-size:12px;margin-top:4px">点击右上角刷新按钮重新加载</p></div>`;
     return;
+  }
+
+  // 已读沉底：未读在前，已读在后（稳定排序，保持同类内原有时间顺序）
+  const history = state.recommender.history;
+  if (history && history.length > 0) {
+    const unread = [];
+    const read = [];
+    for (const item of items) {
+      if (isArticleRead({ title: item.title, url: item.link }, history)) {
+        read.push(item);
+      } else {
+        unread.push(item);
+      }
+    }
+    items = [...unread, ...read];
   }
 
   list.innerHTML = items.map(a => {

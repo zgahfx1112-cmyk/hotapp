@@ -69,6 +69,40 @@ test('selectRecommendDigestItems returns top 5 when interests provided but no ma
   assert.equal(result.length, 5);
 });
 
+test('selectRecommendDigestItems deprioritizes read items when history provided', () => {
+  const items = [
+    { id: '1', platform: 'weibo', title: '某明星结婚', url: 'https://a.com/1' },
+    { id: '2', platform: 'baidu', title: 'AI芯片重大突破', url: 'https://a.com/2' },
+    { id: '3', platform: 'toutiao', title: '股市今日大涨', url: 'https://a.com/3' },
+    { id: '4', platform: 'weibo', title: '新能源汽车销量创新高', url: 'https://a.com/4' },
+    { id: '5', platform: 'baidu', title: '综艺节目收视率', url: 'https://a.com/5' }
+  ];
+  const history = [
+    { title: '某明星结婚', url: 'https://a.com/1', timestamp: Date.now() },
+    { title: 'AI芯片重大突破', url: 'https://a.com/2', timestamp: Date.now() }
+  ];
+
+  const result = selectRecommendDigestItems(items, [], history);
+  // 已读的 id:1, id:2 应该排在后面
+  assert.equal(result[0].id, '3');
+  assert.equal(result[1].id, '4');
+  assert.equal(result[2].id, '5');
+  // 已读项在最后
+  assert.deepEqual(result.slice(3).map(i => i.id).sort(), ['1', '2']);
+});
+
+test('selectRecommendDigestItems works without history parameter', () => {
+  const items = [
+    { id: '1', platform: 'weibo', title: '热搜A', url: 'https://a.com/1' },
+    { id: '2', platform: 'baidu', title: '热搜B', url: 'https://a.com/2' }
+  ];
+
+  // 不传 history，不影响原有逻辑
+  const result = selectRecommendDigestItems(items);
+  assert.equal(result.length, 2);
+  assert.equal(result[0].id, '1');
+});
+
 test('getDigestLabel returns correct time-based label', () => {
   const { getDigestLabel } = require('../public/digest');
 
