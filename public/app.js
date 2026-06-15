@@ -22,7 +22,8 @@ const state = {
   hotPage: 0,
   hotLoading: false,
   hotExhausted: false,
-  hotObserver: null
+  hotObserver: null,
+  currentChannel: 'all'
 };
 
 const $ = sel => document.querySelector(sel);
@@ -1216,6 +1217,9 @@ function scoreCandidate(item, context) {
   if ((context.disliked || []).some(kw => item.title.includes(kw))) score -= 50;
   score -= getReadPenalty(item, context.history || []);
 
+  // Time-aware boost (additive, small weight)
+  score += getTimeAwareBoost(item, context);
+
   return { ...item, score };
 }
 
@@ -1278,6 +1282,47 @@ function rerankDuplicateEvents(items, windowSize = 5) {
   }
 
   return ranked;
+}
+
+// ── Time-Aware Recommendation ──
+
+function getTimePeriod(now) {
+  const hour = new Date(now || Date.now()).getHours();
+  if (hour >= 6 && hour < 11) return 'morning';
+  if (hour >= 11 && hour < 17) return 'afternoon';
+  if (hour >= 17 && hour < 22) return 'evening';
+  return 'night';
+}
+
+function getTimeAwareBoost(item, context) {
+  const period = getTimePeriod(context.now);
+  const contentType = classifyContentTypeForTime(item.title);
+
+  const timeWeights = {
+    morning: { tech: 4, news: 3, entertainment: -2, sports: -1, general: 0 },
+    afternoon: { tech: 0, news: 4, entertainment: 0, sports: 3, general: 0 },
+    evening: { tech: -2, news: 0, entertainment: 5, sports: 3, general: 1 },
+    night: { tech: -3, news: -3, entertainment: 5, sports: 0, general: 2 }
+  };
+
+  const weights = timeWeights[period];
+  return weights[contentType] || 0;
+}
+
+function classifyContentTypeForTime(title) {
+  const techKeywords = ['AI', '人工智能', '芯片', '苹果', '华为', '特斯拉', 'SpaceX', '大模型', 'GPT', 'ChatGPT', '机器人', '自动驾驶', '手机', '5G', '6G', '量子', '航天', '卫星', '新能源', '电池', '小米', 'OPPO', 'vivo', '荣耀', '显卡', 'CPU', 'GPU', '英特尔', 'AMD', '英伟达', '微软', 'Google', 'Meta', '字节', '腾讯', '阿里', '百度', '京东', '拼多多', '美团', '无人机', '星链', '火箭', '科技', '技术', '软件', '硬件', '系统', '开源', '编程', '代码', '算法'];
+  
+  const newsKeywords = ['政策', '民生', '交通', '补贴', '医保', '社保', '养老', '医疗', '住房', '环境', '污染', '天气', '地震', '台风', '洪水', '疫情', '疫苗', '安全', '事故', '火灾', '犯罪', '法律', '法院', '公安', '消防', '美国', '日本', '韩国', '俄罗斯', '乌克兰', '欧洲', '中东', '战争', '冲突', '谈判', '协议', '峰会', '联合国', '经济', '通胀', '加息', '降息', '央行'];
+  
+  const entertainmentKeywords = ['电影', '综艺', '明星', '演唱会', '票房', '上映', '电视剧', '网剧', '八卦', '恋情', '结婚', '离婚', '肖战', '王一博', '迪丽热巴', '杨紫', '赵丽颖', '杨幂', '选秀', '偶像', '女团', '男团', '游戏', '原神', '王者荣耀', '英雄联盟', '黑神话', '崩坏', '星穹铁道', '米哈游', 'Steam', 'Switch', 'PS5', 'Xbox', '电竞'];
+  
+  const sportsKeywords = ['NBA', '足球', '世界杯', '奥运会', '乒乓球', '羽毛球', '排球', '游泳', '田径', '马拉松', '滑雪', '滑板', '篮球', 'CBA', '中超', '英超', '西甲', '欧冠', '德甲', '意甲', '法甲', '梅西', 'C罗', '詹姆斯', '库里', '杜兰特', '孙颖莎', '马龙', '樊振东', '全红婵', '谷爱凌', '郑钦文', '苏炳添'];
+  
+  if (techKeywords.some(kw => title.includes(kw))) return 'tech';
+  if (newsKeywords.some(kw => title.includes(kw))) return 'news';
+  if (entertainmentKeywords.some(kw => title.includes(kw))) return 'entertainment';
+  if (sportsKeywords.some(kw => title.includes(kw))) return 'sports';
+  return 'general';
 }
 
 // ── Recommendation Algorithm Enhancements ──
@@ -1364,6 +1409,75 @@ function calculateJaccardSimilarity(setA, setB) {
   return intersection.size / union.size;
 }
 
+// ── Topic Clustering ──
+
+function clusterTopics(items) {
+  const clusters = [];
+  const used = new Set();
+
+  for (let i = 0; i < items.length; i++) {
+    if (used.has(i)) continue;
+
+    const cluster = {
+      id: `cluster_${items[i].id}`,
+      mainItem: items[i],
+      relatedItems: [],
+      sources: [items[i].source],
+      totalCount: 1
+    };
+
+    for (let j = i + 1; j < items.length; j++) {
+      if (used.has(j)) continue;
+
+      if (isSameEvent(items[i], items[j])) {
+        cluster.relatedItems.push(items[j]);
+        if (!cluster.sources.includes(items[j].source)) {
+          cluster.sources.push(items[j].source);
+        }
+        cluster.totalCount++;
+        used.add(j);
+      }
+    }
+
+    used.add(i);
+    clusters.push(cluster);
+  }
+
+  return clusters;
+}
+
+function renderClusterCard(cluster) {
+  const { mainItem, relatedItems, sources, totalCount } = cluster;
+
+  if (totalCount === 1) {
+    return null;
+  }
+
+  const SOURCE_ICONS = { '头条':'📰','微博':'🔥','百度':'🔍','知乎':'💡','虎扑':'🏀','IT之家':'💻','36氪':'💰','虎嗅':'📊','少数派':'⚡','贴吧':'💬' };
+
+  const relatedHtml = relatedItems.slice(0, 3).map(item => {
+    const icon = SOURCE_ICONS[item.source] || '📝';
+    return `<div class="cluster-related-item" data-url="${escapeHtml(item.url || '')}">
+      <span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform || ''}">${escapeHtml(item.source)}</span>
+      <span class="cluster-related-title">${escapeHtml(item.title)}</span>
+    </div>`;
+  }).join('');
+
+  const moreCount = relatedItems.length > 3 ? relatedItems.length - 3 : 0;
+
+  return `
+    <div class="cluster-badge">${totalCount}个来源报道</div>
+    <div class="cluster-sources">
+      ${sources.slice(0, 4).map(s => `<span class="source-tag">${s}</span>`).join('')}
+      ${sources.length > 4 ? `<span class="source-more">+${sources.length - 4}</span>` : ''}
+    </div>
+    <div class="cluster-related">
+      ${relatedHtml}
+      ${moreCount > 0 ? `<div class="cluster-more">还有 ${moreCount} 条相关报道</div>` : ''}
+    </div>
+  `;
+}
+
 function buildHybridFeed() {
   const unified = [];
   const now = Date.now();
@@ -1410,13 +1524,16 @@ function buildHybridFeed() {
       replay.push({ id: h.id, title: h.title, url: h.url || '', image: h.image || null, source: getPlatformName(h.platform), platform: h.platform, type: 'hot', heatScore: h.heatScore || 0, timestamp: h.timestamp || now, _replay: true });
     }
     if (!replay.length) return [];
-    return replay;
+    return filterByChannel(replay, state.currentChannel);
   }
 
-  const maxHeat = Math.max(...unified.map(i => i.heatScore || 0), 1);
+  // Filter by current channel
+  const channelFiltered = filterByChannel(unified, state.currentChannel);
+  
+  const maxHeat = Math.max(...channelFiltered.map(i => i.heatScore || 0), 1);
   const bw = state.recommender.getBehaviorWeights();
 
-  const scored = unified.map(item => {
+  const scored = channelFiltered.map(item => {
     const scoredItem = scoreCandidate(item, {
       now,
       interests: state.recommender.interests,
@@ -1473,6 +1590,193 @@ function buildHybridFeed() {
   sessionStorage.setItem('toutiao_shown', JSON.stringify(shownIds));
 
   return ranked;
+}
+
+// ── Reading Progress ──
+
+function getReadingProgress() {
+  const history = JSON.parse(localStorage.getItem('toutiao_history') || '[]');
+  const today = new Date().toISOString().split('T')[0];
+  
+  const todayReads = history.filter(h => {
+    const readDate = new Date(h.timestamp).toISOString().split('T')[0];
+    return readDate === today;
+  });
+  
+  const classifyContentType = (title) => {
+    const patterns = {
+      tech: ['AI', '人工智能', '芯片', '苹果', '华为', '特斯拉', 'SpaceX', '大模型', 'GPT', 'ChatGPT', '机器人', '自动驾驶', '手机', '5G', '6G', '量子', '航天', '卫星', '新能源', '电池', '小米', 'OPPO', 'vivo', '荣耀', '显卡', 'CPU', 'GPU', '英特尔', 'AMD', '英伟达', '微软', 'Google', 'Meta', '字节', '腾讯', '阿里', '百度', '京东', '拼多多', '美团', '无人机', '星链', '火箭', '科技', '技术', '软件', '硬件', '系统', '开源', '编程', '代码', '算法'],
+      news: ['政策', '民生', '交通', '补贴', '医保', '社保', '养老', '医疗', '住房', '环境', '污染', '天气', '地震', '台风', '洪水', '疫情', '疫苗', '安全', '事故', '火灾', '犯罪', '法律', '法院', '公安', '消防', '美国', '日本', '韩国', '俄罗斯', '乌克兰', '欧洲', '中东', '战争', '冲突', '谈判', '协议', '峰会', '联合国', '经济', '通胀', '加息', '降息', '央行'],
+      entertainment: ['电影', '综艺', '明星', '演唱会', '票房', '上映', '电视剧', '网剧', '八卦', '恋情', '结婚', '离婚', '肖战', '王一博', '迪丽热巴', '杨紫', '赵丽颖', '杨幂', '选秀', '偶像', '女团', '男团', '游戏', '原神', '王者荣耀', '英雄联盟', '黑神话', '崩坏', '星穹铁道', '米哈游', 'Steam', 'Switch', 'PS5', 'Xbox', '电竞'],
+      sports: ['NBA', '足球', '世界杯', '奥运会', '乒乓球', '羽毛球', '排球', '游泳', '田径', '马拉松', '滑雪', '滑板', '篮球', 'CBA', '中超', '英超', '西甲', '欧冠', '德甲', '意甲', '法甲', '梅西', 'C罗', '詹姆斯', '库里', '杜兰特', '孙颖莎', '马龙', '樊振东', '全红婵', '谷爱凌', '郑钦文', '苏炳添']
+    };
+    
+    for (const [type, keywords] of Object.entries(patterns)) {
+      if (keywords.some(kw => title.includes(kw))) return type;
+    }
+    return 'general';
+  };
+  
+  const progress = {
+    total: todayReads.length,
+    tech: todayReads.filter(h => classifyContentType(h.title) === 'tech').length,
+    news: todayReads.filter(h => classifyContentType(h.title) === 'news').length,
+    entertainment: todayReads.filter(h => classifyContentType(h.title) === 'entertainment').length,
+    sports: todayReads.filter(h => classifyContentType(h.title) === 'sports').length
+  };
+  
+  return progress;
+}
+
+function renderReadingProgress() {
+  const progress = getReadingProgress();
+  const maxItems = 20;
+  const percentage = Math.min((progress.total / maxItems) * 100, 100);
+  
+  const isComplete = progress.total >= maxItems;
+  const statusClass = isComplete ? 'complete' : '';
+  
+  return `
+    <div class="reading-progress-card ${statusClass}">
+      <div class="progress-header">
+        <span class="progress-title">${isComplete ? '🎉 今日目标已完成！' : '📊 今日阅读'}</span>
+        <span class="progress-count">${progress.total}/${maxItems}</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: ${percentage}%"></div>
+      </div>
+      <div class="progress-details">
+        <span class="detail-item">🔬 科技 ${progress.tech}</span>
+        <span class="detail-item">📰 新闻 ${progress.news}</span>
+        <span class="detail-item">🎬 娱乐 ${progress.entertainment}</span>
+        <span class="detail-item">⚽ 体育 ${progress.sports}</span>
+      </div>
+    </div>
+  `;
+}
+
+// ── Personalized Channels ──
+
+const CHANNEL_KEY = 'toutiao_channels';
+
+function getDefaultChannels() {
+  return [
+    { id: 'all', name: '全部', filters: [], isDefault: true },
+    { id: 'tech', name: '科技', filters: ['AI', '人工智能', '芯片', '苹果', '华为', '特斯拉', '手机', '5G', '6G', '量子', '航天', '新能源', '电池', '小米', '显卡', 'CPU', 'GPU', '微软', 'Google', '腾讯', '阿里', '百度', '科技', '技术', '软件', '硬件', '系统', '开源', '编程', '代码', '算法'], isDefault: true },
+    { id: 'ai', name: 'AI专题', filters: ['AI', '人工智能', '大模型', 'GPT', 'ChatGPT', '机器人', '自动驾驶'], isDefault: true },
+    { id: 'gaming', name: '游戏', filters: ['游戏', '原神', '王者荣耀', '英雄联盟', '黑神话', '崩坏', '星穹铁道', '米哈游', 'Steam', 'Switch', 'PS5', 'Xbox', '电竞'], isDefault: true },
+    { id: 'news', name: '新闻', filters: ['政策', '民生', '国际', '战争', '经济', '央行', '房价', '股市'], isDefault: true },
+    { id: 'entertainment', name: '娱乐', filters: ['电影', '综艺', '明星', '演唱会', '电视剧', '网剧', '八卦', '恋情'], isDefault: true },
+    { id: 'sports', name: '体育', filters: ['NBA', '足球', '世界杯', '奥运会', '篮球', 'CBA', '英超', '西甲', '欧冠'], isDefault: true }
+  ];
+}
+
+function getChannels() {
+  const saved = localStorage.getItem(CHANNEL_KEY);
+  const custom = saved ? JSON.parse(saved) : [];
+  return [...getDefaultChannels(), ...custom];
+}
+
+function getCustomChannels() {
+  const saved = localStorage.getItem(CHANNEL_KEY);
+  return saved ? JSON.parse(saved) : [];
+}
+
+function createChannel(name, keywords) {
+  const channels = getCustomChannels();
+  const newChannel = {
+    id: `custom_${Date.now()}`,
+    name,
+    filters: keywords.split(/[,，、\s]+/).filter(Boolean),
+    isCustom: true
+  };
+  
+  channels.push(newChannel);
+  localStorage.setItem(CHANNEL_KEY, JSON.stringify(channels));
+  
+  return newChannel;
+}
+
+function deleteChannel(channelId) {
+  const channels = getCustomChannels();
+  const filtered = channels.filter(ch => ch.id !== channelId);
+  localStorage.setItem(CHANNEL_KEY, JSON.stringify(filtered));
+}
+
+function filterByChannel(items, channelId) {
+  if (channelId === 'all') return items;
+  
+  const channels = getChannels();
+  const channel = channels.find(ch => ch.id === channelId);
+  
+  if (!channel || !channel.filters.length) return items;
+  
+  return items.filter(item => {
+    return channel.filters.some(filter => 
+      item.title.includes(filter) || 
+      (item.keywords && item.keywords.includes(filter))
+    );
+  });
+}
+
+function renderChannelSelector() {
+  const channels = getChannels();
+  
+  return `
+    <div class="channel-selector">
+      <div class="channel-tabs">
+        ${channels.map(ch => `
+          <button class="channel-tab ${state.currentChannel === ch.id ? 'active' : ''}" data-channel="${ch.id}">
+            ${escapeHtml(ch.name)}
+            ${ch.isCustom ? '<span class="channel-delete" data-channel="' + ch.id + '">&times;</span>' : ''}
+          </button>
+        `).join('')}
+        <button class="channel-tab channel-add" id="addChannelBtn">+</button>
+      </div>
+    </div>
+  `;
+}
+
+function showAddChannelModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'manage-overlay';
+  overlay.innerHTML = `
+    <div class="manage-box">
+      <h3>创建自定义频道</h3>
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 4px;">频道名称</label>
+        <input type="text" id="channelNameInput" placeholder="如：AI专题" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: var(--bg-primary); color: var(--text-primary);">
+      </div>
+      <div style="margin-bottom: 16px;">
+        <label style="font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 4px;">关键词（逗号分隔）</label>
+        <input type="text" id="channelKeywordsInput" placeholder="如：AI, 人工智能, 大模型" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: var(--bg-primary); color: var(--text-primary);">
+      </div>
+      <div style="display: flex; gap: 8px; justify-content: flex-end;">
+        <button class="manage-clear" id="cancelChannelBtn" style="border-color: var(--border); color: var(--text-secondary);">取消</button>
+        <button style="padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: #fff; font-size: 12px; cursor: pointer;" id="saveChannelBtn">创建</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  overlay.querySelector('#cancelChannelBtn').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  
+  overlay.querySelector('#saveChannelBtn').addEventListener('click', () => {
+    const name = overlay.querySelector('#channelNameInput').value.trim();
+    const keywords = overlay.querySelector('#channelKeywordsInput').value.trim();
+    
+    if (!name || !keywords) {
+      showToast('请填写频道名称和关键词');
+      return;
+    }
+    
+    createChannel(name, keywords);
+    overlay.remove();
+    showToast(`频道"${name}"已创建`);
+    renderTab();
+  });
 }
 
 // ── Daily Digest ──
@@ -1553,6 +1857,8 @@ function renderRecommendTab() {
   }
 
   const digestHtml = renderDailyDigest();
+  const progressHtml = renderReadingProgress();
+  const channelHtml = renderChannelSelector();
 
   if (!state.feedItems.length) {
     state.feedItems = buildHybridFeed();
@@ -1561,6 +1867,8 @@ function renderRecommendTab() {
   }
 
   area.innerHTML = `
+    ${progressHtml}
+    ${channelHtml}
     ${digestHtml}
     <div class="feed-grid" id="feedGrid"></div>
     <div class="feed-sentinel" id="feedSentinel"></div>
@@ -1570,6 +1878,28 @@ function renderRecommendTab() {
   const interests = state.recommender.interests;
   if (interests.length) {
     area.insertAdjacentHTML('beforeend', `<div class="reason-summary">推荐依据：${interests.map(t => `<span class="reason-tag">${t}</span>`).join('')}</div>`);
+  }
+
+  // Setup channel event listeners
+  area.querySelectorAll('.channel-tab[data-channel]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      if (e.target.classList.contains('channel-delete')) {
+        e.stopPropagation();
+        const channelId = e.target.dataset.channel;
+        deleteChannel(channelId);
+        if (state.currentChannel === channelId) state.currentChannel = 'all';
+        renderTab();
+        return;
+      }
+      state.currentChannel = btn.dataset.channel;
+      state.feedItems = buildHybridFeed();
+      renderTab();
+    });
+  });
+
+  const addBtn = area.querySelector('#addChannelBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => showAddChannelModal());
   }
 
   feedInit();
@@ -1620,8 +1950,17 @@ function loadFeedPage() {
       'linear-gradient(135deg,#fa709a,#fee140)','linear-gradient(135deg,#a18cd1,#fbc2eb)',
       'linear-gradient(135deg,#fccb90,#d57eeb)','linear-gradient(135deg,#96fbc4,#f9f586)',
     ];
-    batch.forEach((item, i) => {
+
+    // Cluster items within this batch
+    const clustered = clusterTopics(batch);
+    let displayedCount = 0;
+
+    clustered.forEach((cluster, i) => {
+      const item = cluster.mainItem;
       state.feedShownIds.add(item.id);
+      // Also mark related items as shown
+      cluster.relatedItems.forEach(ri => state.feedShownIds.add(ri.id));
+
       const g = gradients[(state.feedPage * 10 + i) % gradients.length];
       const SOURCE_ICONS = { '头条':'📰','微博':'🔥','百度':'🔍','知乎':'💡','虎扑':'🏀','IT之家':'💻','36氪':'💰','虎嗅':'📊','少数派':'⚡','贴吧':'💬','GitHub':'🐙','V2EX':'💬' };
       const icon = SOURCE_ICONS[item.source] || (item.type === 'hot' ? '🔥' : '📝');
@@ -1634,11 +1973,14 @@ function loadFeedPage() {
       const readClass = isRead ? ' read' : '';
       const readBadge = isRead ? '<span class="read-badge">✓已读</span>' : '<span class="unread-badge">未读</span>';
 
+      // Build cluster HTML if this item has related items
+      const clusterHtml = cluster.totalCount > 1 ? renderClusterCard(cluster) : '';
+
       const card = document.createElement('div');
-      card.className = 'feed-card' + readClass;
+      card.className = 'feed-card' + readClass + (cluster.totalCount > 1 ? ' cluster-card' : '');
       card.classList.add('fade-in');
       const starred = isBookmarked(item.id);
-      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}${readBadge}</div><div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, readLater: { id: item.id, title: item.title, url: item.url, source: item.source, type: item.type, image: item.image }, hide: true })}`;
+      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}${readBadge}</div>${clusterHtml}<div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, readLater: { id: item.id, title: item.title, url: item.url, source: item.source, type: item.type, image: item.image }, hide: true })}`;
       card.addEventListener('click', (e) => {
         if (e.target.closest('.card-action-btn')) return;
         state.recommender.recordView(item);

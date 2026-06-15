@@ -243,6 +243,173 @@ body {
 .feed-sentinel { height: 1px; }
 .feed-loading { text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px; }
 
+/* ── Cluster Card ── */
+
+.feed-card.cluster-card {
+  border-left: 3px solid var(--accent);
+}
+
+.cluster-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.cluster-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.source-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.source-more {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.cluster-related {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.cluster-related-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.cluster-related-item:hover .cluster-related-title {
+  color: var(--accent);
+}
+
+.cluster-related-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 0.15s ease;
+}
+
+.cluster-more {
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.cluster-more:hover {
+  text-decoration: underline;
+}
+
+/* ── Channel Selector ── */
+
+.channel-selector {
+  margin-bottom: 14px;
+}
+
+.channel-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.channel-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.channel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+
+.channel-tab:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.channel-tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.channel-tab.active .channel-delete {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.channel-tab.active .channel-delete:hover {
+  color: #fff;
+}
+
+.channel-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.channel-delete:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--red);
+}
+
+.channel-add {
+  background: var(--bg-primary);
+  border-style: dashed;
+  font-weight: 600;
+}
+
+.channel-add:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  border-style: solid;
+}
+
 /* ── Interest tags (recommend tab) ── */
 
 .interest-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
@@ -387,6 +554,73 @@ body {
 /* ── Footer ── */
 
 .footer { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; }
+
+/* ── Reading Progress Card ── */
+
+.reading-progress-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
+}
+
+.reading-progress-card.complete {
+  background: linear-gradient(135deg, rgba(79, 110, 246, 0.05), rgba(124, 58, 237, 0.05));
+  border-color: var(--accent);
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.progress-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.progress-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.progress-bar {
+  height: 8px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #6c8ef8);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.reading-progress-card.complete .progress-fill {
+  background: linear-gradient(90deg, var(--green), #2ecc71);
+}
+
+.progress-details {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.detail-item {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 
 /* ── Digest card ── */
 
