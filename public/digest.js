@@ -11,7 +11,7 @@ function matchInterests(title, interests) {
   return false;
 }
 
-function selectRecommendDigestItems(hotItems, interests, history) {
+function selectRecommendDigestItems(hotItems, interests, history, limit = 5) {
   const allowedPlatforms = new Set(['toutiao', 'baidu', 'weibo']);
   const filtered = (hotItems || []).filter(item => allowedPlatforms.has(item.platform));
 
@@ -31,12 +31,16 @@ function selectRecommendDigestItems(hotItems, interests, history) {
     const combined = [...matched, ...unmatched];
     const unread = combined.filter(item => !isRead(item));
     const read = combined.filter(item => isRead(item));
-    return [...unread, ...read].slice(0, 5);
+    return [...unread, ...read].slice(0, limit);
   }
 
   const unread = filtered.filter(item => !isRead(item));
   const read = filtered.filter(item => isRead(item));
-  return [...unread, ...read].slice(0, 5);
+  return [...unread, ...read].slice(0, limit);
+}
+
+function selectRecommendDigestTop10(hotItems, interests, history) {
+  return selectRecommendDigestItems(hotItems, interests, history, 10);
 }
 
 function getDigestLabel(hour) {
@@ -47,5 +51,5 @@ function getDigestLabel(hour) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { selectRecommendDigestItems, getDigestLabel };
+  module.exports = { selectRecommendDigestItems, selectRecommendDigestTop10, getDigestLabel };
 }
