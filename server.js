@@ -100,6 +100,26 @@ app.use('/api/reader', (req, res) => {
   req.pipe(proxy);
 });
 
+// ── Trend proxy (/api/trend → Python :8000) ──
+
+app.use('/api/trend', (req, res) => {
+  const opts = {
+    hostname: 'localhost',
+    port: HOTAPP_PORT,
+    path: '/api/trend' + (req.url || ''),
+    method: req.method,
+    headers: { ...req.headers, host: `localhost:${HOTAPP_PORT}` }
+  };
+  const proxy = http.request(opts, proxyRes => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.pipe(res);
+  });
+  proxy.on('error', () => {
+    res.status(502).json({ error: '趋势服务暂不可用' });
+  });
+  req.pipe(proxy);
+});
+
 // ── Python sidecar ──
 
 let hotAppProcess = null;

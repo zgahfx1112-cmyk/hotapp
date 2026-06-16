@@ -21,7 +21,168 @@ from reader import extract_article
 ssl._create_default_https_context = ssl._create_unverified_context
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE_FILE = os.path.join(HERE, "cache.json")
+HISTORY_FILE = os.path.join(HERE, "trend_history.json")
 CACHE_TTL = 300  # 缓存有效期 5 分钟
+
+LEGACY_PLATFORMS = {"bilibili", "bilibili_pop", "douyin"}
+
+def _is_legacy_history(arr):
+    if not isinstance(arr, list) or len(arr) == 0:
+        return False
+    first = arr[0]
+    if isinstance(first, dict):
+        ts = first.get("timestamp", 0)
+        if ts < (time.time() - 7*86400) * 1000:
+            return True
+        for item in first.get("items", []):
+            if item.get("platform") in LEGACY_PLATFORMS:
+                return True
+    return False
+
+def _load_history():
+    try:
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                arr = json.load(f)
+            if _is_legacy_history(arr):
+                legacy = HISTORY_FILE.replace(".json", ".legacy.json")
+                os.replace(HISTORY_FILE, legacy)
+                print(f"  [历史] 旧格式已重命名为 {os.path.basename(legacy)}")
+                return []
+            if isinstance(arr, list):
+                return arr
+    except Exception:
+        pass
+    return []
+
+def _save_history(arr):
+    tmp = HISTORY_FILE + ".tmp"
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(arr, f, ensure_ascii=False)
+    os.replace(tmp, HISTORY_FILE)
+
+def shouldSnapshot(prevSnap, newTopItems, now):
+    if not prevSnap:
+        return True
+    if now - prevSnap.get("timestamp", 0) < 10 * 60 * 1000:
+        prev_keys = {title_key(it.get("title", "")) for it in prevSnap.get("items", []) if title_key(it.get("title", ""))}
+        new_keys = {title_key(it.get("title", "")) for it in newTopItems if title_key(it.get("title", ""))}
+        if not prev_keys and not new_keys:
+            return False
+        if not prev_keys or not new_keys:
+            return True
+        inter = len(prev_keys & new_keys)
+        union = len(prev_keys | new_keys)
+        if union > 0 and inter / union > 0.8:
+            return False
+    return True
+
+def snapshot_trend(items):
+    now = int(time.time() * 1000)
+    groups = defaultdict(list)
+    for it in items:
+        groups[it["platform"]].append(it)
+    snapshot_items = []
+    for plat, plat_items in groups.items():
+        plat_items.sort(key=lambda x: x.get("rank", 999))
+        for it in plat_items[:20]:
+            snapshot_items.append({
+                "id": it.get("id", ""),
+                "title": it.get("title", ""),
+                "url": it.get("url", ""),
+                "platform": it.get("platform", ""),
+                "rank": it.get("rank", 0),
+                "heatScore": it.get("heatScore", 0),
+            })
+    arr = _load_history()
+    prevSnap = arr[-1] if arr else None
+    if not shouldSnapshot(prevSnap, snapshot_items, now):
+        return
+    arr.append({"timestamp": now, "items": snapshot_items})
+    cutoff = (now - 14 * 86400 * 1000)
+    arr = [s for s in arr if s.get("timestamp", 0) >= cutoff]
+    if len(arr) > 2000:
+        arr = arr[-2000:]
+    _save_history(arr)
+
+def _api_trend_history(hours):
+    arr = _load_history()
+    now = int(time.time() * 1000)
+    cutoff = now - hours * 3600 * 1000
+    window = [s for s in arr if s.get("timestamp", 0) >= cutoff]
+    if not window:
+        return {"events": [], "snapshots": len(window)}
+    events = {}
+    for snap in window:
+        for it in snap.get("items", []):
+            tk = title_key(it.get("title", ""))
+            if not tk:
+                continue
+            if tk not in events:
+                events[tk] = {
+                    "title": it["title"],
+                    "platforms": set(),
+                    "firstSeen": snap["timestamp"],
+                    "lastSeen": snap["timestamp"],
+                    "heatSamples": [],
+                    "maxHeat": 0,
+                }
+            ev = events[tk]
+            ev["platforms"].add(it.get("platform", ""))
+            ev["firstSeen"] = min(ev["firstSeen"], snap["timestamp"])
+            ev["lastSeen"] = max(ev["lastSeen"], snap["timestamp"])
+            score = it.get("heatScore", 0)
+            ev["heatSamples"].append({"t": snap["timestamp"], "score": score})
+            ev["maxHeat"] = max(ev["maxHeat"], score)
+    result = []
+    for ev in events.values():
+        ev["platforms"] = sorted(ev["platforms"])
+        samples = ev["heatSamples"]
+        if len(samples) >= 2:
+            first_score = samples[0]["score"]
+            last_score = samples[-1]["score"]
+            max_score = ev["maxHeat"]
+            max_idx = max(range(len(samples)), key=lambda i: samples[i]["score"])
+            if first_score > 0 and (last_score - first_score) / first_score > 0.2:
+                trend = "up"
+            elif first_score > 0 and (first_score - last_score) / first_score > 0.2:
+                trend = "down"
+            elif max_idx >= len(samples) // 2 and first_score > 0 and (max_score - first_score) / first_score > 0.5:
+                trend = "spike"
+            else:
+                trend = "stable"
+        else:
+            trend = "stable"
+        ev["trend"] = trend
+        result.append(ev)
+    result.sort(key=lambda x: x["maxHeat"], reverse=True)
+    return {"events": result, "snapshots": len(window)}
+
+def _api_trend_recap(date_str):
+    arr = _load_history()
+    try:
+        import datetime
+        target = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+    except Exception:
+        return {"error": "invalid date format"}
+    target_mid = int(target.replace(hour=12, minute=0, second=0, microsecond=0).timestamp() * 1000)
+    best = None
+    best_diff = float('inf')
+    for snap in arr:
+        snap_date = datetime.datetime.fromtimestamp(snap["timestamp"] / 1000)
+        if snap_date.strftime("%Y-%m-%d") != date_str:
+            continue
+        diff = abs(snap["timestamp"] - target_mid)
+        if diff < best_diff:
+            best_diff = diff
+            best = snap
+    if not best:
+        return {"items": [], "date": date_str}
+    all_items = list(best.get("items", []))
+    all_items.sort(key=lambda x: x.get("rank", 999))
+    for i, it in enumerate(all_items):
+        it["globalRank"] = i + 1
+    return {"items": all_items, "date": date_str, "timestamp": best.get("timestamp")}
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
@@ -412,6 +573,7 @@ def background_refresh():
             data = fetch_all_platforms()
             if data["items"]:
                 save_cache(data)
+                snapshot_trend(data["items"])
                 print(f"[后台] 刷新完成: {len(data['items'])} 条")
         except Exception as e:
             print(f"[后台] 刷新失败: {e}")
@@ -425,6 +587,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._api_trending()
         elif self.path.startswith("/api/reader"):
             self._api_reader()
+        elif self.path.startswith("/api/trend/history"):
+            self._api_trend_history()
+        elif self.path.startswith("/api/trend/recap"):
+            self._api_trend_recap()
         elif self.path == "/":
             self.path = "/index.html"
             super().do_GET()
@@ -462,6 +628,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             data = fetch_all_platforms()
             if data["items"]:
                 save_cache(data)
+                snapshot_trend(data["items"])
                 body = json.dumps(data, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -521,6 +688,37 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(body)
+
+    def _api_trend_history(self):
+        query = urllib.parse.urlparse(self.path).query
+        params = urllib.parse.parse_qs(query)
+        hours = int(params.get("hours", ["24"])[0])
+        result = _api_trend_history(hours)
+        body = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _api_trend_recap(self):
+        query = urllib.parse.urlparse(self.path).query
+        params = urllib.parse.parse_qs(query)
+        date_str = params.get("date", [None])[0]
+        if not date_str:
+            body = json.dumps({"error": "missing date parameter"}, ensure_ascii=False).encode("utf-8")
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        result = _api_trend_recap(date_str)
+        body = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
 
     def log_message(self, fmt, *args):
         if "/api/" in str(args):
