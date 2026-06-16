@@ -389,10 +389,31 @@ function toggleReadLater(article) {
 let readerFontSize = 'md';
 try { readerFontSize = localStorage.getItem('toutiao_readerFont') || 'md'; } catch {}
 
-async function openReader(article) {
+async function openReader(article, navContext) {
+  const isDarkTheme = (() => {
+    let theme = 'auto';
+    try { theme = localStorage.getItem('toutiao_theme') || 'auto'; } catch {}
+    if (theme === 'dark') return true;
+    if (theme === 'auto') return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return false;
+  })();
+
   const overlay = document.createElement('div');
   overlay.className = 'reader-overlay';
-  overlay.innerHTML = `<div class="reader-modal">
+
+  let navHtml = '';
+  if (navContext && navContext.list && navContext.list.length > 1) {
+    const { list, index } = navContext;
+    const hasPrev = index > 0;
+    const hasNext = index < list.length - 1;
+    navHtml = `<div class="reader-nav-bar">
+      <button class="reader-nav-btn" data-nav="prev" ${hasPrev ? '' : 'disabled'}>← 上一篇</button>
+      <span class="reader-nav-info">${index + 1} / ${list.length}</span>
+      <button class="reader-nav-btn" data-nav="next" ${hasNext ? '' : 'disabled'}>下一篇 →</button>
+    </div>`;
+  }
+
+  overlay.innerHTML = `<div class="reader-modal ${isDarkTheme ? 'reader-dark' : ''}">
     <div class="reader-header">
       <div class="reader-header-left">
         <span class="reader-source">${escapeHtml(article.source || '未知来源')}</span>
@@ -419,6 +440,7 @@ async function openReader(article) {
       <span class="spacer"></span>
       <button class="reader-footer-btn primary" data-action="original">🔗 原文打开</button>
     </div>
+    ${navHtml}
   </div>`;
 
   document.body.appendChild(overlay);
@@ -481,6 +503,24 @@ async function openReader(article) {
     if (article.url || article.link) window.open(article.url || article.link, '_blank');
   });
 
+  // Navigation controls
+  if (navContext && navContext.list) {
+    const navBtns = overlay.querySelectorAll('.reader-nav-btn[data-nav]');
+    navBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const dir = btn.dataset.nav;
+        const newList = navContext.list;
+        let newIdx = navContext.index;
+        if (dir === 'prev' && newIdx > 0) newIdx--;
+        else if (dir === 'next' && newIdx < newList.length - 1) newIdx++;
+        else return;
+        close();
+        if (history.state && history.state.reader) history.back();
+        openReader(newList[newIdx], { list: newList, index: newIdx });
+      });
+    });
+  }
+
   // Fetch content
   const body = overlay.querySelector('.reader-body');
   const titleEl = body.querySelector('.reader-title');
@@ -513,6 +553,18 @@ async function openReader(article) {
         img.style.display = 'none';
       });
     });
+
+    // Inject related reports
+    const relatedHtml = renderRelatedReports(article);
+    if (relatedHtml) {
+      body.insertAdjacentHTML('beforeend', relatedHtml);
+      body.querySelectorAll('.related-report-item[data-url]').forEach(el => {
+        el.addEventListener('click', () => {
+          const url = el.dataset.url;
+          if (url) window.open(url, '_blank');
+        });
+      });
+    }
   } catch (e) {
     body.innerHTML = `<h1 class="reader-title">${escapeHtml(article.title || '')}</h1>
       <div class="reader-error">
@@ -1475,7 +1527,141 @@ function renderClusterCard(cluster) {
       ${relatedHtml}
       ${moreCount > 0 ? `<div class="cluster-more">还有 ${moreCount} 条相关报道</div>` : ''}
     </div>
+    <button class="event-timeline-btn" data-cluster-id="${escapeHtml(cluster.id)}" data-title="${escapeHtml(mainItem.title)}">🔍 事件全景</button>
   `;
+}
+
+// ── Event Timeline Modal ──
+
+function showEventTimelineModal(seedItem) {
+  const items = state.hotItems && state.hotItems.length ? state.hotItems : [];
+  const clusters = clusterTopics(items);
+  const cluster = clusters.find(c =>
+    c.mainItem && isSameEvent(seedItem, c.mainItem)
+  ) || clusters.find(c =>
+    c.relatedItems.some(ri => isSameEvent(seedItem, ri))
+  );
+
+  if (!cluster) return;
+
+  const SOURCE_ICONS = { '头条':'📰','微博':'🔥','百度':'🔍','知乎':'💡','虎扑':'🏀','IT之家':'💻','36氪':'💰','虎嗅':'📊','少数派':'⚡','贴吧':'💬' };
+
+  const allItems = [cluster.mainItem, ...cluster.relatedItems]
+    .filter(Boolean)
+    .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+  const firstTs = allItems[0] ? allItems[0].timestamp : 0;
+  const lastTs = allItems[allItems.length - 1] ? allItems[allItems.length - 1].timestamp : 0;
+  const spanText = firstTs && lastTs ? `${formatTime(new Date(firstTs).toISOString())} ~ ${formatTime(new Date(lastTs).toISOString())}` : '';
+
+  const timelineHtml = allItems.map(item => {
+    const icon = SOURCE_ICONS[item.source] || '📝';
+    const ts = item.timestamp ? formatTime(new Date(item.timestamp).toISOString()) : '';
+    return `<div class="event-timeline-row" data-url="${escapeHtml(item.url || '')}">
+      <span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform || ''}">${escapeHtml(item.source)}</span>
+      <span class="event-timeline-title">${icon} ${escapeHtml(item.title)}</span>
+      ${item.heatScore ? `<span class="event-timeline-heat">${item.heatScore}</span>` : ''}
+      <span class="event-timeline-time">${ts}</span>
+    </div>`;
+  }).join('');
+
+  const trendMiniHtml = (typeof window !== 'undefined' && window.Trend)
+    ? `<div class="event-timeline-trend"><button class="event-timeline-trend-btn" data-title="${escapeHtml(cluster.mainItem.title)}">📈 查看完整趋势</button></div>`
+    : '';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'reader-overlay';
+  overlay.innerHTML = `<div class="reader-modal event-timeline-modal">
+    <div class="reader-header">
+      <div class="reader-header-left">
+        <span class="reader-source">🔍 事件全景</span>
+        <span class="reader-time">${cluster.totalCount}个来源 · ${spanText}</span>
+      </div>
+      <button class="reader-close" title="关闭">×</button>
+    </div>
+    <div class="reader-body">
+      <h1 class="reader-title">${escapeHtml(cluster.mainItem.title)}</h1>
+      <div class="event-timeline-list">${timelineHtml}</div>
+      ${trendMiniHtml}
+    </div>
+  </div>`;
+
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
+
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    window.removeEventListener('popstate', onPopState);
+    overlay.remove();
+    document.body.style.overflow = '';
+  };
+  const onPopState = () => close();
+  history.pushState({ timeline: true }, '');
+  window.addEventListener('popstate', onPopState);
+
+  overlay.querySelector('.reader-close').addEventListener('click', () => {
+    close();
+    if (history.state && history.state.timeline) history.back();
+  });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      close();
+      if (history.state && history.state.timeline) history.back();
+    }
+  });
+
+  overlay.querySelectorAll('.event-timeline-row[data-url]').forEach(row => {
+    row.addEventListener('click', () => {
+      const url = row.dataset.url;
+      if (url) window.open(url, '_blank');
+    });
+  });
+
+  const trendBtn = overlay.querySelector('.event-timeline-trend-btn');
+  if (trendBtn) {
+    trendBtn.addEventListener('click', () => {
+      if (window.Trend) window.Trend.showTrendModal(trendBtn.dataset.title);
+    });
+  }
+}
+
+// ── Related Reports in Reader ──
+
+function renderRelatedReports(article) {
+  if (!article || !article.title) return '';
+  const items = state.hotItems && state.hotItems.length ? state.hotItems : [];
+  const clusters = clusterTopics(items);
+  const cluster = clusters.find(c =>
+    c.mainItem && isSameEvent(article, c.mainItem)
+  ) || clusters.find(c =>
+    c.relatedItems.some(ri => isSameEvent(article, ri))
+  );
+
+  if (!cluster || cluster.totalCount <= 1) return '';
+
+  const allRelated = [cluster.mainItem, ...cluster.relatedItems]
+    .filter(Boolean)
+    .filter(item => item.url !== article.url && item.title !== article.title)
+    .slice(0, 5);
+
+  if (!allRelated.length) return '';
+
+  const SOURCE_ICONS = { '头条':'📰','微博':'🔥','百度':'🔍','知乎':'💡','虎扑':'🏀','IT之家':'💻','36氪':'💰','虎嗅':'📊','少数派':'⚡','贴吧':'💬' };
+
+  const itemsHtml = allRelated.map(item => {
+    const icon = SOURCE_ICONS[item.source] || '📝';
+    return `<div class="related-report-item" data-url="${escapeHtml(item.url || '')}">
+      <span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform || ''}">${escapeHtml(item.source)}</span>
+      <span class="related-report-title">${icon} ${escapeHtml(item.title)}</span>
+    </div>`;
+  }).join('');
+
+  return `<div class="reader-related">
+    <div class="reader-related-header">📰 相关报道（${cluster.totalCount}个来源）</div>
+    ${itemsHtml}
+  </div>`;
 }
 
 function buildHybridFeed() {
@@ -1782,9 +1968,13 @@ function showAddChannelModal() {
 // ── Daily Digest ──
 
 function renderDailyDigest() {
-  const top5 = selectRecommendDigestItems(state.hotItems, state.recommender.interests, state.recommender.history);
+  const isExpanded = localStorage.getItem('toutiao_digest_expand') === 'true';
+  const limit = isExpanded ? 10 : 5;
+  const top5 = selectRecommendDigestItems(state.hotItems, state.recommender.interests, state.recommender.history, limit);
   if (!top5.length) return '';
 
+  const allItems = selectRecommendDigestTop10(state.hotItems, state.recommender.interests, state.recommender.history);
+  const showExpand = allItems.length > 5;
   const label = getDigestLabel();
   const items = top5.map((h, i) => {
     const plat = getPlatformName(h.platform);
@@ -1798,10 +1988,22 @@ function renderDailyDigest() {
     </div>`;
   }).join('');
 
-  return `<div class="digest-card">
+  const expandBtn = showExpand ? `<div class="digest-expand-wrap" style="text-align:center;padding:6px 0 0">
+    <button class="digest-expand-btn" onclick="toggleDigestExpand(this)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 14px;font-size:12px;color:var(--accent);cursor:pointer">${isExpanded ? '收起 ↑' : '展开更多 ↓'}</button>
+  </div>` : '';
+
+  return `<div class="digest-card" data-expanded="${isExpanded}">
     <div class="digest-header">${label}</div>
     ${items}
+    ${expandBtn}
   </div>`;
+}
+
+function toggleDigestExpand(btn) {
+  const card = btn.closest('.digest-card');
+  const wasExpanded = localStorage.getItem('toutiao_digest_expand') === 'true';
+  localStorage.setItem('toutiao_digest_expand', wasExpanded ? 'false' : 'true');
+  renderTab();
 }
 
 function markDigestRead(el) {
@@ -1830,6 +2032,7 @@ function renderTab() {
   else if (state.currentTab === 'bookmark') renderBookmarkTab();
   else if (state.currentTab === 'history') renderHistoryTab();
   else if (state.currentTab === 'dislike') renderDislikeTab();
+  else if (state.currentTab === 'trend' && window.Trend) Trend.renderTrendTab();
 }
 
 function renderSubTabs(items, activeKey, onClick, showAll = true) {
@@ -1983,6 +2186,10 @@ function loadFeedPage() {
       card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}${readBadge}</div>${clusterHtml}<div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, readLater: { id: item.id, title: item.title, url: item.url, source: item.source, type: item.type, image: item.image }, hide: true })}`;
       card.addEventListener('click', (e) => {
         if (e.target.closest('.card-action-btn')) return;
+        if (e.target.closest('.event-timeline-btn')) {
+          showEventTimelineModal(item);
+          return;
+        }
         state.recommender.recordView(item);
         card.classList.add('read');
         const titleEl = card.querySelector('.feed-title');
@@ -1992,6 +2199,7 @@ function loadFeedPage() {
         }
         if (item.type === 'rss') {
           // RSS文章打开阅读视图
+          const feedIdx = state.feedItems.findIndex(f => f.id === item.id);
           openReader({
             id: item.id,
             title: item.title,
@@ -2000,7 +2208,7 @@ function loadFeedPage() {
             source: item.source,
             summary: '',
             pub_date: new Date(item.timestamp).toISOString()
-          });
+          }, feedIdx >= 0 ? { list: state.feedItems, index: feedIdx } : null);
         } else {
           // 热搜直接跳外链
           if (item.url) window.open(item.url, '_blank');
@@ -2166,6 +2374,7 @@ function renderHotList() {
         </div>
         <div class="heat-bar"><div class="heat-bar-fill" style="width:${pct}%"></div></div>
         ${buildCardActions({ share: true, bookmark: { starred, bmid: bmId, hid: item.id } })}
+        ${window.Trend ? '<button class="card-action-btn trend-entry" data-title="' + escapeHtml(item.title).replace(/"/g, '&quot;') + '" style="font-size:12px" title="查看趋势">📈</button>' : ''}
       </div>`;
     div.addEventListener('click', (e) => {
       if (e.target.closest('.card-action-btn')) return;
@@ -2197,6 +2406,13 @@ function renderHotList() {
         el.innerHTML = `${starIcon(nowStarred)}<span>${starLabel(nowStarred)}</span>`;
       }
     });
+    const trendBtn = div.querySelector('.trend-entry');
+    if (trendBtn) {
+      trendBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.Trend) Trend.showTrendModal(trendBtn.dataset.title);
+      });
+    }
     frag.appendChild(div);
   });
   list.appendChild(frag);
@@ -2338,6 +2554,7 @@ function renderRssList() {
           const badge = titleEl.querySelector('.unread-badge, .read-badge');
           if (badge) { badge.className = 'read-badge'; badge.textContent = '✓已读'; }
         }
+        const rssIdx = state.articles.findIndex(x => String(x.id) === String(a.id));
         openReader({
           id: 'rss_' + a.id,
           title: a.title,
@@ -2346,7 +2563,7 @@ function renderRssList() {
           source: a.source_name,
           summary: a.summary || '',
           pub_date: a.pub_date
-        });
+        }, rssIdx >= 0 ? { list: state.articles, index: rssIdx } : null);
       }
     });
   });
@@ -2947,6 +3164,7 @@ if (typeof module !== 'undefined' && module.exports) {
     normalizeEventTitle,
     extractEventKeywords,
     isSameEvent,
+    clusterTopics,
     rerankCandidates,
     rerankDuplicateEvents,
     scoreCandidate,
