@@ -28,7 +28,7 @@ test('createInitController renders immediately before async article loader finis
 
   const pending = controller.init();
 
-  assert.deepEqual(calls.slice(0, 5), ['restorePrefs', 'initTheme', 'renderTab', 'renderInterestTags', 'setupTabs']);
+  assert.deepEqual(calls.slice(0, 5), ['restorePrefs', 'initTheme', 'renderTab', 'setupTabs', 'registerSW']);
   assert.equal(calls.includes('loadArticles:30'), true);
   assert.equal(calls.includes('afterArticlesLoaded'), false);
 

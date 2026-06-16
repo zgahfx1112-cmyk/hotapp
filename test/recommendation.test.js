@@ -184,7 +184,11 @@ test('scoreCandidate heavily penalizes disliked and previously read items', () =
     topicKeys: ['科技']
   };
 
-  test('scoreCandidate boosts 头条 and 微博 above other sources', () => {
+  const result = scoreCandidate(item, context);
+  assert.ok(result.score < 0);
+});
+
+test('scoreCandidate boosts 头条 and 微博 above other sources', () => {
   const now = new Date('2026-05-20T12:00:00Z').getTime();
   const context = {
     now,
@@ -232,8 +236,4 @@ test('rerankCandidates allows up to 5 头条/微博 items in top 10', () => {
 
   assert.ok(toutiaoCount <= 5);
   assert.ok(weiboCount <= 5);
-});
-
-const result = scoreCandidate(item, context);
-  assert.ok(result.score < 0);
 });
