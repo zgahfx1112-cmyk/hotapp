@@ -1678,6 +1678,7 @@ function buildHybridFeed() {
       title: a.title,
       url: a.link || '',
       image: a.image_url || null,
+      summary: a.summary || '',
       source: a.source_name,
       type: 'rss',
       heatScore: 0,
@@ -1704,10 +1705,10 @@ function buildHybridFeed() {
     sessionStorage.removeItem('toutiao_shown');
     const replay = [];
     for (const a of state.articles) {
-      replay.push({ id: 'rss_' + a.id, title: a.title, url: a.link || '', image: a.image_url || null, source: a.source_name, type: 'rss', heatScore: 0, timestamp: a.pub_date ? new Date(a.pub_date).getTime() : now, _replay: true });
+      replay.push({ id: 'rss_' + a.id, title: a.title, url: a.link || '', image: a.image_url || null, summary: a.summary || '', source: a.source_name, type: 'rss', heatScore: 0, timestamp: a.pub_date ? new Date(a.pub_date).getTime() : now, _replay: true });
     }
     for (const h of state.hotItems) {
-      replay.push({ id: h.id, title: h.title, url: h.url || '', image: h.image || null, source: getPlatformName(h.platform), platform: h.platform, type: 'hot', heatScore: h.heatScore || 0, timestamp: h.timestamp || now, _replay: true });
+      replay.push({ id: h.id, title: h.title, url: h.url || '', image: h.image || null, summary: '', source: getPlatformName(h.platform), platform: h.platform, type: 'hot', heatScore: h.heatScore || 0, timestamp: h.timestamp || now, _replay: true });
     }
     if (!replay.length) return [];
     return filterByChannel(replay, state.currentChannel);
@@ -2183,7 +2184,9 @@ function loadFeedPage() {
       card.className = 'feed-card' + readClass + (cluster.totalCount > 1 ? ' cluster-card' : '');
       card.classList.add('fade-in');
       const starred = isBookmarked(item.id);
-      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}${readBadge}</div>${clusterHtml}<div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, readLater: { id: item.id, title: item.title, url: item.url, source: item.source, type: item.type, image: item.image }, hide: true })}`;
+      const summaryText = item.summary ? escapeHtml(item.summary).substring(0, 80) + (item.summary.length > 80 ? '...' : '') : '';
+      const summaryHtml = summaryText ? `<div class="feed-summary">${summaryText}</div>` : '';
+      card.innerHTML = `${imgHtml}<div class="feed-title">${escapeHtml(item.title)}${readBadge}</div>${summaryHtml}${clusterHtml}<div class="feed-meta"><span class="platform-badge ${item.type === 'rss' ? 'ithome' : item.platform}">${escapeHtml(item.source)}</span><span class="feed-type-badge">${item.type === 'rss' ? '资讯' : '热搜'}</span></div><div class="feed-reason">${item.reason}</div>${buildCardActions({ share: true, bookmark: { starred }, readLater: { id: item.id, title: item.title, url: item.url, source: item.source, type: item.type, image: item.image }, hide: true })}`;
       card.addEventListener('click', (e) => {
         if (e.target.closest('.card-action-btn')) return;
         if (e.target.closest('.event-timeline-btn')) {
