@@ -141,6 +141,10 @@ function startHotApp() {
   hotAppProcess.on('exit', (code) => {
     console.error(`[HotApp] Exited with code ${code}`);
     hotAppProcess = null;
+    if (code !== 0) {
+      console.log('[HotApp] Sidecar crashed, restarting in 5s...');
+      setTimeout(() => startHotApp(), 5000);
+    }
   });
 }
 

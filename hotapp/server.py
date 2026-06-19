@@ -90,7 +90,7 @@ def snapshot_trend(items):
                 "id": it.get("id", ""),
                 "title": it.get("title", ""),
                 "url": it.get("url", ""),
-                "platform": it.get("platform", ""),
+                "platform": PLATFORM_NAMES.get(it.get("platform", ""), it.get("platform", "")),
                 "rank": it.get("rank", 0),
                 "heatScore": it.get("heatScore", 0),
             })
@@ -451,6 +451,7 @@ PLATFORMS = {
         "raw_response": True,
         "parse": parse_hupu},
 }  # end PLATFORMS
+PLATFORM_NAMES = {k: v["name"] for k, v in PLATFORMS.items()}
 # 知乎热榜 API 需登录验证，暂用 RSS 替代
 
 def fetch_one(key, cfg):
@@ -738,7 +739,10 @@ if __name__ == "__main__":
         data = fetch_all_platforms()
         if data["items"]:
             save_cache(data)
+            snapshot_trend(data["items"])
             print(f"[启动] 抓取完成: {len(data['items'])} 条")
+    else:
+        snapshot_trend(cache_data["items"])
 
     # 启动后台刷新线程
     refresh_thread = threading.Thread(target=background_refresh, daemon=True)

@@ -148,8 +148,9 @@
     return fetch('/api/trend/history?hours=6')
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (!data || !data.length) return [];
-        var items = data.map(function(ev) {
+        var events = data && data.events ? data.events : (Array.isArray(data) ? data : []);
+        if (!events.length) return [];
+        var items = events.map(function(ev) {
           var samples = ev.heatSamples || [];
           var recent = samples.length >= 2 ? samples[samples.length - 1].score : (ev.maxHeat || 0);
           var prev = samples.length >= 2 ? samples[samples.length - 2].score : recent;
@@ -191,10 +192,11 @@
     fetch('/api/trend/history?hours=24')
       .then(function(r) { return r.json(); })
       .then(function(data) {
+        var events = data && data.events ? data.events : (Array.isArray(data) ? data : []);
         var ev = null;
-        if (data && data.length) {
-          for (var i = 0; i < data.length; i++) {
-            if (data[i].title === title) { ev = data[i]; break; }
+        if (events.length) {
+          for (var i = 0; i < events.length; i++) {
+            if (events[i].title === title) { ev = events[i]; break; }
           }
         }
         var canvas = document.getElementById('trendModalCanvas');
@@ -307,7 +309,7 @@
             '<div class="trending-title" style="font-size:14px;color:var(--text-primary);cursor:pointer" onclick="Trend.showTrendModal(\'' + escapeHtml(item.title).replace(/'/g, "\\'") + '\')">' + escapeHtml(item.title) + '</div>' +
             '<div class="trending-meta" style="font-size:12px;margin-top:2px">' +
               '<span style="' + trendColor + '">' + trendIcon + ' ' + deltaText + '</span>' +
-              '<span style="margin-left:8px">' + (item.platforms || []).map(function(p) { return '<span class="platform-badge ' + p + '">' + escapeHtml(p) + '</span>'; }).join('') + '</span>' +
+              '<span style="margin-left:8px">' + (item.platforms || []).map(function(p) { var pk = PLATFORM_KEY_MAP[p] || p; return '<span class="platform-badge ' + pk + '">' + escapeHtml(p) + '</span>'; }).join('') + '</span>' +
               '<span style="margin-left:8px">最高 ' + formatNumber(item.maxHeat || 0) + '</span>' +
             '</div>' +
           '</div>' +
@@ -344,18 +346,24 @@
     });
   }
 
+  var PLATFORM_KEY_MAP = {
+    '微博': 'weibo', '百度': 'baidu', '贴吧': 'tieba', '头条': 'toutiao',
+    '少数派': 'sspai', 'IT之家': 'ithome', '知乎热榜': 'zhihu', '虎扑': 'hupu'
+  };
+
   function renderRecapItems(el, items) {
     if (!items.length) {
       el.innerHTML = '<div class="empty-state" style="padding:20px;text-align:center">该日期暂无数据</div>';
       return;
     }
     el.innerHTML = items.map(function(item, idx) {
+      var platformKey = PLATFORM_KEY_MAP[item.platform] || (item.platform || '');
       return '<div class="trending-item" style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border-color,#eee)">' +
         '<span class="rank-num" style="min-width:24px;font-weight:bold;color:var(--text-muted)">' + (item.globalRank || idx + 1) + '</span>' +
         '<div style="flex:1;min-width:0">' +
-          '<div class="trending-title" style="font-size:14px;color:var(--text-primary)">' + escapeHtml(item.title) + '</div>' +
+          '<div class="trending-title" style="font-size:14px;color:var(--text-primary);cursor:pointer" onclick="Trend.showTrendModal(\'' + escapeHtml(item.title).replace(/'/g, "\\'") + '\')">' + escapeHtml(item.title) + '</div>' +
           '<div class="trending-meta" style="font-size:12px;margin-top:2px">' +
-            '<span class="platform-badge ' + (item.platform || '') + '">' + escapeHtml(item.platform || '') + '</span>' +
+            '<span class="platform-badge ' + platformKey + '">' + escapeHtml(item.platform || '') + '</span>' +
             '<span style="margin-left:8px">🔥 ' + formatNumber(item.heatScore || item.maxHeat || 0) + '</span>' +
             '<span style="margin-left:8px">排名 ' + (item.rank || idx + 1) + '</span>' +
           '</div>' +

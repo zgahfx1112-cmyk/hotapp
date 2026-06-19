@@ -40,4 +40,4 @@
 - [x] `node --test` 全部测试通过（132 pass / 0 fail）
 - [x] 设计文档 `docs/superpowers/specs/2026-06-16-trend-history-and-content-depth-design.md` 已写
 - [ ] 按 `MIMOCODE_TASKS.md` §6 人工冒烟 6 项全部通过
-- [ ] 按模块分次提交（`feat:` 前缀），未 push（除非用户要求）
+- [x] 按模块分次提交（`feat:` 前缀），未 push（除非用户要求）
